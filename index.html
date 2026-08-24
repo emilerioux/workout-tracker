@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Mes Workouts</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="theme-color" content="#6c5ce7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <header>
+    <h1>💪 Mes Workouts</h1>
+    <p id="encouragement"></p>
+  </header>
+
+  <main>
+    <!-- ONGLET: LOG -->
+    <section id="view-log" class="view active">
+      <form id="log-form">
+        <div class="field">
+          <label for="program-select">Programme</label>
+          <select id="program-select">
+            <option value="">Libre (tous les exercices)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="exercise">Exercice</label>
+          <div class="combobox-wrap">
+            <input type="text" id="exercise" autocomplete="off" placeholder="Ex: Développé couché" required>
+            <span class="combobox-arrow">▾</span>
+            <div id="exercise-dropdown" class="combobox-dropdown"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="weight">Poids (lb)</label>
+            <input type="number" id="weight" step="0.5" min="0" required>
+          </div>
+          <div class="field">
+            <label for="sets">Séries</label>
+            <input type="number" id="sets" min="1" required>
+          </div>
+          <div class="field">
+            <label for="reps">Reps</label>
+            <input type="number" id="reps" min="1" required>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" id="log-submit-btn">Ajouter</button>
+          <button type="button" id="log-cancel-btn" class="secondary-btn hidden">Annuler</button>
+        </div>
+      </form>
+
+      <section id="log-list"></section>
+    </section>
+
+    <!-- ONGLET: PROGRAMMES -->
+    <section id="view-workouts" class="view">
+      <form id="workout-form">
+        <div class="field">
+          <label for="workout-name">Nom du programme</label>
+          <input type="text" id="workout-name" placeholder="Ex: Push Day">
+        </div>
+
+        <div class="field">
+          <label for="new-exercise-name">Exercices du programme</label>
+          <div class="inline-add">
+            <input type="text" id="new-exercise-name" placeholder="Ex: Développé couché">
+            <button type="button" id="add-exercise-btn">+</button>
+          </div>
+        </div>
+
+        <div id="draft-exercise-chips" class="chips"></div>
+
+        <div class="form-actions">
+          <button type="submit" id="workout-submit-btn">Enregistrer le programme</button>
+          <button type="button" id="workout-cancel-btn" class="secondary-btn hidden">Annuler</button>
+        </div>
+      </form>
+
+      <div id="workout-list"></div>
+    </section>
+
+    <!-- ONGLET: PROGRESSION -->
+    <section id="view-progress" class="view">
+      <div class="field">
+        <label for="progress-exercise-select">Exercice</label>
+        <select id="progress-exercise-select"></select>
+      </div>
+
+      <div class="segmented" id="metric-toggle">
+        <button type="button" data-metric="weight" class="active">Poids</button>
+        <button type="button" data-metric="reps">Reps</button>
+      </div>
+
+      <div id="progress-stats" class="progress-stats"></div>
+      <div id="chart-container"></div>
+    </section>
+
+    <!-- ONGLET: RÉGLAGES -->
+    <section id="view-settings" class="view">
+      <div class="settings-card">
+        <h3>Sauvegarde</h3>
+        <p class="settings-hint">Tes données sont stockées seulement sur ce téléphone. Exporte-les de temps en temps pour ne rien perdre.</p>
+        <button type="button" id="export-btn">Exporter mes données</button>
+        <label class="secondary-btn file-label" for="import-file">Importer une sauvegarde</label>
+        <input type="file" id="import-file" accept="application/json" class="hidden">
+      </div>
+    </section>
+  </main>
+
+  <nav id="bottom-nav">
+    <button class="nav-btn active" data-view="view-log">
+      <span class="nav-icon">📝</span>
+      <span>Log</span>
+    </button>
+    <button class="nav-btn" data-view="view-workouts">
+      <span class="nav-icon">📋</span>
+      <span>Programmes</span>
+    </button>
+    <button class="nav-btn" data-view="view-progress">
+      <span class="nav-icon">📈</span>
+      <span>Progression</span>
+    </button>
+    <button class="nav-btn" data-view="view-settings">
+      <span class="nav-icon">⚙️</span>
+      <span>Réglages</span>
+    </button>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>
