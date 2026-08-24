@@ -61,6 +61,62 @@ function switchView(viewId) {
   if (viewId === "view-workouts") renderWorkouts();
 }
 
+/* ---------- Rest timer ---------- */
+
+let restTimerInterval = null;
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+    osc.onended = () => ctx.close();
+  } catch {}
+}
+
+function formatTimer(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function startRestTimer(seconds, onDone) {
+  clearInterval(restTimerInterval);
+  const bar = document.getElementById("rest-timer");
+  const label = document.getElementById("rest-timer-label");
+  let remaining = seconds;
+
+  bar.classList.remove("hidden");
+  label.textContent = `Repos : ${formatTimer(remaining)}`;
+
+  restTimerInterval = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(restTimerInterval);
+      label.textContent = "Repos terminé 💪";
+      if (navigator.vibrate) navigator.vibrate(300);
+      beep();
+      setTimeout(() => bar.classList.add("hidden"), 2500);
+      if (onDone) onDone();
+    } else {
+      label.textContent = `Repos : ${formatTimer(remaining)}`;
+    }
+  }, 1000);
+}
+
+function stopRestTimer() {
+  clearInterval(restTimerInterval);
+  document.getElementById("rest-timer").classList.add("hidden");
+}
+
+document.getElementById("rest-timer-skip").addEventListener("click", stopRestTimer);
+
 /* ---------- Encouragement ---------- */
 
 function showEncouragement() {
@@ -72,7 +128,7 @@ function showEncouragement() {
 
 function allExerciseNames() {
   const fromLogs = logs.map((l) => l.exercise);
-  const fromWorkouts = workouts.flatMap((w) => w.exercises);
+  const fromWorkouts = workouts.flatMap((w) => w.exercises.map((ex) => ex.name));
   return [...new Set([...fromLogs, ...fromWorkouts])].sort((a, b) => a.localeCompare(b));
 }
 
@@ -84,47 +140,76 @@ function populateProgramSelect() {
   if (workouts.some((w) => w.id === current)) select.value = current;
 }
 
+function setupCombobox(input, dropdown, sourceFn, onSelect) {
+  function open(filter = "") {
+    const names = sourceFn();
+    const q = filter.trim().toLowerCase();
+    const matches = q ? names.filter((n) => n.toLowerCase().includes(q)) : names;
+
+    dropdown.innerHTML = matches.length
+      ? matches.map((n) => `<div class="combobox-option" data-name="${n}">${n}</div>`).join("")
+      : `<div class="combobox-empty">Aucun exercice existant — tape pour en créer un nouveau</div>`;
+
+    dropdown.classList.add("open");
+  }
+
+  function close() {
+    dropdown.classList.remove("open");
+  }
+
+  input.addEventListener("focus", () => open(input.value));
+  input.addEventListener("input", () => open(input.value));
+
+  dropdown.addEventListener("mousedown", (e) => {
+    const opt = e.target.closest(".combobox-option");
+    if (!opt) return;
+    input.value = opt.dataset.name;
+    close();
+    if (onSelect) onSelect(opt.dataset.name);
+  });
+
+  return { open, close };
+}
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".combobox-wrap")) {
+    exerciseCombobox.close();
+    newExerciseCombobox.close();
+  }
+});
+
 const exerciseInput = document.getElementById("exercise");
-const exerciseDropdown = document.getElementById("exercise-dropdown");
 
 function exerciseSuggestionSource() {
   const programId = document.getElementById("program-select").value;
   return programId
-    ? workouts.find((w) => w.id === programId)?.exercises ?? []
+    ? workouts.find((w) => w.id === programId)?.exercises.map((ex) => ex.name) ?? []
     : allExerciseNames();
 }
 
-function openExerciseDropdown(filter = "") {
-  const names = exerciseSuggestionSource();
-  const q = filter.trim().toLowerCase();
-  const matches = q ? names.filter((n) => n.toLowerCase().includes(q)) : names;
-
-  exerciseDropdown.innerHTML = matches.length
-    ? matches.map((n) => `<div class="combobox-option" data-name="${n}">${n}</div>`).join("")
-    : `<div class="combobox-empty">Aucun exercice existant — tape pour en créer un nouveau</div>`;
-
-  exerciseDropdown.classList.add("open");
+function prefillFromProgram(name) {
+  const programId = document.getElementById("program-select").value;
+  if (!programId) return;
+  const program = workouts.find((w) => w.id === programId);
+  const ex = program?.exercises.find((e) => e.name === name);
+  if (!ex) return;
+  if (ex.sets) document.getElementById("sets").value = ex.sets;
+  if (ex.reps) {
+    const match = ex.reps.match(/\d+/);
+    if (match) document.getElementById("reps").value = match[0];
+  }
 }
+
+const exerciseCombobox = setupCombobox(exerciseInput, document.getElementById("exercise-dropdown"), exerciseSuggestionSource, prefillFromProgram);
 
 function closeExerciseDropdown() {
-  exerciseDropdown.classList.remove("open");
+  exerciseCombobox.close();
 }
 
-exerciseInput.addEventListener("focus", () => openExerciseDropdown(exerciseInput.value));
-exerciseInput.addEventListener("input", () => openExerciseDropdown(exerciseInput.value));
-
-exerciseDropdown.addEventListener("mousedown", (e) => {
-  const opt = e.target.closest(".combobox-option");
-  if (!opt) return;
-  exerciseInput.value = opt.dataset.name;
-  closeExerciseDropdown();
-});
-
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".combobox-wrap")) closeExerciseDropdown();
-});
-
 document.getElementById("program-select").addEventListener("change", closeExerciseDropdown);
+
+const newExerciseInput = document.getElementById("new-exercise-name");
+const newExerciseCombobox = setupCombobox(newExerciseInput, document.getElementById("new-exercise-dropdown"), allExerciseNames);
 
 function renderLog() {
   const container = document.getElementById("log-list");
@@ -204,6 +289,11 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
   showEncouragement();
 
   const wasEditing = Boolean(editingLogId);
+  if (!wasEditing) {
+    const progEx = program?.exercises.find((pe) => pe.name === exercise);
+    if (progEx?.rest) startRestTimer(progEx.rest);
+  }
+
   resetLogForm();
   e.target.reset();
   if (!wasEditing) document.getElementById("program-select").value = programId;
@@ -244,15 +334,55 @@ document.getElementById("log-list").addEventListener("click", (e) => {
 
 /* ---------- Workouts (programmes) view ---------- */
 
+// Assigns display labels (A, A1/A2 for supersets, B, C...) based on
+// consecutive entries sharing the same `group` id.
+function labelExerciseGroups(exercises) {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let letterIndex = -1;
+  let lastGroup = null;
+  const groupSizes = {};
+  exercises.forEach((ex) => { groupSizes[ex.group] = (groupSizes[ex.group] || 0) + 1; });
+
+  const counters = {};
+  return exercises.map((ex) => {
+    if (ex.group !== lastGroup) {
+      letterIndex++;
+      lastGroup = ex.group;
+      counters[ex.group] = 0;
+    }
+    counters[ex.group]++;
+    const letter = letters[letterIndex % letters.length];
+    const inSuperset = groupSizes[ex.group] > 1;
+    return { ...ex, label: inSuperset ? `${letter}${counters[ex.group]}` : letter, inSuperset };
+  });
+}
+
 function renderDraftChips() {
-  const container = document.getElementById("draft-exercise-chips");
-  container.innerHTML = draftExercises
-    .map((name, i) => `<span class="chip">${name}<button type="button" data-i="${i}">✕</button></span>`)
+  const container = document.getElementById("draft-exercise-list");
+  const toggleWrap = document.getElementById("superset-toggle-wrap");
+  toggleWrap.classList.toggle("hidden", draftExercises.length === 0);
+
+  const labeled = labelExerciseGroups(draftExercises);
+  container.innerHTML = labeled
+    .map((ex, i) => `
+      <div class="draft-card ${ex.inSuperset ? "in-superset" : ""}">
+        <span class="group-label">${ex.label}</span>
+        <div class="draft-info">
+          <strong>${ex.name}</strong>
+          <span>${[ex.sets && `${ex.sets} séries`, ex.reps && `${ex.reps} reps`, ex.rest && `${ex.rest}s repos`].filter(Boolean).join(" · ") || "—"}</span>
+        </div>
+        <div class="draft-actions">
+          <button type="button" class="move-up" data-i="${i}" ${i === 0 ? "disabled" : ""}>▲</button>
+          <button type="button" class="move-down" data-i="${i}" ${i === draftExercises.length - 1 ? "disabled" : ""}>▼</button>
+          <button type="button" class="remove-draft" data-i="${i}">✕</button>
+        </div>
+      </div>
+    `)
     .join("");
 }
 
 document.getElementById("add-exercise-btn").addEventListener("click", addDraftExercise);
-document.getElementById("new-exercise-name").addEventListener("keydown", (e) => {
+newExerciseInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     addDraftExercise();
@@ -260,18 +390,46 @@ document.getElementById("new-exercise-name").addEventListener("keydown", (e) => 
 });
 
 function addDraftExercise() {
-  const input = document.getElementById("new-exercise-name");
-  const name = input.value.trim();
+  const name = newExerciseInput.value.trim();
   if (!name) return;
-  draftExercises.push(name);
-  input.value = "";
-  input.focus();
+
+  const sets = document.getElementById("new-exercise-sets").value;
+  const reps = document.getElementById("new-exercise-reps").value.trim();
+  const rest = document.getElementById("new-exercise-rest").value;
+  const superset = document.getElementById("new-exercise-superset").checked;
+
+  const lastGroup = draftExercises.length ? draftExercises[draftExercises.length - 1].group : -1;
+  const group = superset && draftExercises.length ? lastGroup : lastGroup + 1;
+
+  draftExercises.push({
+    name,
+    sets: sets ? Number(sets) : null,
+    reps: reps || null,
+    rest: rest ? Number(rest) : null,
+    group,
+  });
+
+  newExerciseInput.value = "";
+  document.getElementById("new-exercise-sets").value = "";
+  document.getElementById("new-exercise-reps").value = "";
+  document.getElementById("new-exercise-rest").value = "";
+  document.getElementById("new-exercise-superset").checked = false;
+  newExerciseInput.focus();
   renderDraftChips();
 }
 
-document.getElementById("draft-exercise-chips").addEventListener("click", (e) => {
-  if (!e.target.matches("button")) return;
-  draftExercises.splice(Number(e.target.dataset.i), 1);
+document.getElementById("draft-exercise-list").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const i = Number(btn.dataset.i);
+
+  if (btn.matches(".remove-draft")) {
+    draftExercises.splice(i, 1);
+  } else if (btn.matches(".move-up") && i > 0) {
+    [draftExercises[i - 1], draftExercises[i]] = [draftExercises[i], draftExercises[i - 1]];
+  } else if (btn.matches(".move-down") && i < draftExercises.length - 1) {
+    [draftExercises[i + 1], draftExercises[i]] = [draftExercises[i], draftExercises[i + 1]];
+  }
   renderDraftChips();
 });
 
@@ -292,12 +450,12 @@ document.getElementById("workout-form").addEventListener("submit", (e) => {
   if (editingWorkoutId) {
     const w = workouts.find((w) => w.id === editingWorkoutId);
     w.name = name;
-    w.exercises = [...draftExercises];
+    w.exercises = draftExercises.map((ex) => ({ ...ex }));
   } else {
     workouts.push({
       id: crypto.randomUUID(),
       name,
-      exercises: [...draftExercises],
+      exercises: draftExercises.map((ex) => ({ ...ex })),
     });
   }
 
@@ -327,7 +485,14 @@ function renderWorkouts() {
             <button class="delete-btn" data-id="${w.id}">✕</button>
           </div>
         </div>
-        <p>${w.exercises.join(" · ")}</p>
+        ${labelExerciseGroups(w.exercises).map((ex) => `
+          <div class="workout-exercise-row ${ex.inSuperset ? "in-superset" : ""}">
+            <span class="group-label">${ex.label}</span>
+            <span class="ex-name">${ex.name}</span>
+            <span class="ex-detail">${[ex.sets && `${ex.sets}x${ex.reps || "?"}`, ex.rest && `${ex.rest}s`].filter(Boolean).join(" · ")}</span>
+          </div>
+        `).join("")}
+        <button type="button" class="start-btn" data-id="${w.id}">▶ Démarrer la séance</button>
       </div>
     `)
     .join("");
@@ -349,11 +514,16 @@ document.getElementById("workout-list").addEventListener("click", (e) => {
     if (!w) return;
     editingWorkoutId = w.id;
     document.getElementById("workout-name").value = w.name;
-    draftExercises = [...w.exercises];
+    draftExercises = w.exercises.map((ex) => ({ ...ex }));
     renderDraftChips();
     document.getElementById("workout-submit-btn").textContent = "Mettre à jour le programme";
     document.getElementById("workout-cancel-btn").classList.remove("hidden");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  if (e.target.matches(".start-btn")) {
+    startGuidedSession(e.target.dataset.id);
   }
 });
 
@@ -495,6 +665,109 @@ function renderProgress() {
 
   chartBox.innerHTML = buildLineChartSVG(points, unit);
 }
+
+/* ---------- Guided session ---------- */
+
+let guidedSteps = [];
+let guidedIndex = 0;
+let guidedProgramName = "";
+
+function startGuidedSession(programId) {
+  const program = workouts.find((w) => w.id === programId);
+  if (!program) return;
+  guidedSteps = labelExerciseGroups(program.exercises);
+  guidedIndex = 0;
+  guidedProgramName = program.name;
+  document.getElementById("guided-overlay").classList.remove("hidden");
+  renderGuidedStep();
+}
+
+function renderGuidedStep() {
+  const stepEl = document.getElementById("guided-step");
+  const doneEl = document.getElementById("guided-done");
+
+  if (guidedIndex >= guidedSteps.length) {
+    stepEl.classList.add("hidden");
+    doneEl.classList.remove("hidden");
+    document.getElementById("guided-done-summary").textContent =
+      `${guidedProgramName} — ${guidedSteps.length} exercices complétés.`;
+    return;
+  }
+
+  stepEl.classList.remove("hidden");
+  doneEl.classList.add("hidden");
+
+  const step = guidedSteps[guidedIndex];
+  const badge = document.getElementById("guided-superset-badge");
+  if (step.inSuperset) {
+    badge.textContent = `Superset ${step.label}`;
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
+
+  document.getElementById("guided-progress").textContent =
+    `${guidedProgramName} — Exercice ${guidedIndex + 1} / ${guidedSteps.length}`;
+  document.getElementById("guided-exercise-name").textContent = step.name;
+  document.getElementById("guided-exercise-target").textContent =
+    [step.sets && `${step.sets} séries`, step.reps && `${step.reps} reps`, step.rest && `${step.rest}s repos`]
+      .filter(Boolean).join(" · ") || "Pas de cible définie";
+
+  document.getElementById("guided-weight").value = "";
+  document.getElementById("guided-sets").value = step.sets || "";
+  const repsMatch = step.reps ? step.reps.match(/\d+/) : null;
+  document.getElementById("guided-reps").value = repsMatch ? repsMatch[0] : "";
+}
+
+function advanceGuidedStep() {
+  const step = guidedSteps[guidedIndex];
+  const nextStep = guidedSteps[guidedIndex + 1];
+  const isLastInGroup = !nextStep || nextStep.group !== step.group;
+
+  guidedIndex++;
+
+  if (isLastInGroup && step.rest) {
+    startRestTimer(step.rest, renderGuidedStep);
+  } else {
+    renderGuidedStep();
+  }
+}
+
+function closeGuidedSession() {
+  document.getElementById("guided-overlay").classList.add("hidden");
+  stopRestTimer();
+  renderLog();
+}
+
+document.getElementById("guided-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const step = guidedSteps[guidedIndex];
+  const program = workouts.find((w) => w.name === guidedProgramName);
+  const now = new Date();
+
+  logs.push({
+    id: crypto.randomUUID(),
+    exercise: step.name,
+    weight: Number(document.getElementById("guided-weight").value),
+    sets: Number(document.getElementById("guided-sets").value),
+    reps: Number(document.getElementById("guided-reps").value),
+    date: now.toISOString().slice(0, 10),
+    createdAt: now.getTime(),
+    workoutId: program ? program.id : null,
+    workoutName: program ? program.name : null,
+  });
+  saveLogs();
+
+  advanceGuidedStep();
+});
+
+document.getElementById("guided-skip").addEventListener("click", advanceGuidedStep);
+
+document.getElementById("guided-quit").addEventListener("click", () => {
+  if (confirm("Terminer la séance maintenant ?")) closeGuidedSession();
+});
+
+document.getElementById("guided-close").addEventListener("click", closeGuidedSession);
 
 /* ---------- Réglages (backup) ---------- */
 
