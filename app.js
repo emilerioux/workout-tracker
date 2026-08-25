@@ -1,5 +1,7 @@
 const LOGS_KEY = "workout-logs";
 const WORKOUTS_KEY = "workout-templates";
+const BODYWEIGHT_KEY = "bodyweight-logs";
+const THEME_KEY = "theme-preference";
 
 const ENCOURAGEMENTS = [
   "Chaque séance compte 💪",
@@ -32,9 +34,20 @@ function saveWorkouts() {
   localStorage.setItem(WORKOUTS_KEY, JSON.stringify(workouts));
 }
 
+function loadBodyweights() {
+  const raw = localStorage.getItem(BODYWEIGHT_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveBodyweights() {
+  localStorage.setItem(BODYWEIGHT_KEY, JSON.stringify(bodyweights));
+}
+
 let logs = loadLogs();
 let workouts = loadWorkouts();
+let bodyweights = loadBodyweights();
 let draftExercises = [];
+let draftCover = null;
 let editingLogId = null;
 let editingWorkoutId = null;
 
@@ -57,9 +70,329 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 function switchView(viewId) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === viewId));
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === viewId));
-  if (viewId === "view-progress") renderProgress();
+  if (viewId === "view-progress") {
+    renderProgress();
+    if (!document.getElementById("progress-photo-mode").classList.contains("hidden")) renderPhotoGallery();
+    if (!document.getElementById("progress-bodyweight-mode").classList.contains("hidden")) renderBodyweight();
+  }
   if (viewId === "view-workouts") renderWorkouts();
 }
+
+/* ---------- Theme ---------- */
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.getElementById("dark-mode-toggle").checked = theme === "dark";
+}
+
+const storedTheme = localStorage.getItem(THEME_KEY);
+const systemPrefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+applyTheme(storedTheme || (systemPrefersDark ? "dark" : "light"));
+
+document.getElementById("dark-mode-toggle").addEventListener("change", (e) => {
+  const theme = e.target.checked ? "dark" : "light";
+  localStorage.setItem(THEME_KEY, theme);
+  applyTheme(theme);
+});
+
+/* ---------- Bodyweight tracking ---------- */
+
+document.getElementById("bodyweight-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const weight = Number(document.getElementById("bodyweight-input").value);
+  const now = new Date();
+  bodyweights.push({
+    id: crypto.randomUUID(),
+    weight,
+    date: now.toISOString().slice(0, 10),
+    createdAt: now.getTime(),
+  });
+  saveBodyweights();
+  e.target.reset();
+  renderBodyweight();
+});
+
+document.getElementById("bodyweight-list").addEventListener("click", (e) => {
+  if (!e.target.matches(".bw-delete")) return;
+  if (!confirm("Supprimer cette pesée ?")) return;
+  bodyweights = bodyweights.filter((b) => b.id !== e.target.dataset.id);
+  saveBodyweights();
+  renderBodyweight();
+});
+
+function renderBodyweight() {
+  const sorted = [...bodyweights].sort((a, b) => a.createdAt - b.createdAt);
+  const statsBox = document.getElementById("bodyweight-stats");
+  const chartBox = document.getElementById("bodyweight-chart-container");
+  const listBox = document.getElementById("bodyweight-list");
+
+  if (sorted.length === 0) {
+    statsBox.innerHTML = "";
+    chartBox.innerHTML = `<p class="empty-state">Ajoute ta première pesée pour voir ta courbe ici.</p>`;
+    listBox.innerHTML = "";
+    return;
+  }
+
+  const points = sorted.map((b) => ({ date: b.date, value: b.weight }));
+  const latest = points[points.length - 1].value;
+  const first = points[0].value;
+  const diff = latest - first;
+
+  statsBox.innerHTML = `
+    <div class="stat-box">
+      <div class="value">${latest} lb</div>
+      <div class="label">Actuel</div>
+    </div>
+    <div class="stat-box">
+      <div class="value">${diff >= 0 ? "+" : ""}${diff.toFixed(1)} lb</div>
+      <div class="label">Depuis le début</div>
+    </div>
+  `;
+
+  chartBox.innerHTML = buildLineChartSVG(points, "lb");
+
+  const recent = [...sorted].reverse().slice(0, 15);
+  listBox.innerHTML = recent.map((b) => `
+    <div class="bodyweight-row">
+      <span>${formatDateShort(b.date)}</span>
+      <strong>${b.weight} lb</strong>
+      <button type="button" class="bw-delete" data-id="${b.id}">✕</button>
+    </div>
+  `).join("");
+}
+
+/* ---------- Image helpers ---------- */
+
+function compressImage(file, maxWidth = 800, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- Preset cover art (generated locally, works offline) ---------- */
+
+function coverIconSVG(icon) {
+  const c = "rgba(255,255,255,0.92)";
+  switch (icon) {
+    case "barbell":
+      return `<g fill="${c}">
+        <rect x="150" y="88" width="100" height="24" rx="4"/>
+        <rect x="110" y="66" width="24" height="68" rx="4"/>
+        <rect x="266" y="66" width="24" height="68" rx="4"/>
+        <rect x="86" y="76" width="18" height="48" rx="4"/>
+        <rect x="296" y="76" width="18" height="48" rx="4"/>
+      </g>`;
+    case "mountain":
+      return `<polygon points="0,200 90,90 150,150 220,60 320,160 400,120 400,200" fill="${c}"/>`;
+    case "sun":
+      return `<g fill="${c}">
+        <circle cx="200" cy="100" r="32"/>
+        ${[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+          const rad = (deg * Math.PI) / 180;
+          const x1 = 200 + Math.cos(rad) * 46, y1 = 100 + Math.sin(rad) * 46;
+          const x2 = 200 + Math.cos(rad) * 62, y2 = 100 + Math.sin(rad) * 62;
+          return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round"/>`;
+        }).join("")}
+      </g>`;
+    case "wave":
+      return `<path d="M0,140 C60,110 100,170 160,140 C220,110 260,170 320,140 C360,120 380,130 400,140 L400,200 L0,200 Z" fill="${c}"/>`;
+    case "burst":
+      return `<g fill="${c}">
+        ${Array.from({ length: 10 }).map((_, i) => {
+          const rad = (i * 36 * Math.PI) / 180;
+          const x = 200 + Math.cos(rad) * 68, y = 100 + Math.sin(rad) * 68;
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6"/>`;
+        }).join("")}
+        <circle cx="200" cy="100" r="24"/>
+      </g>`;
+    case "runner":
+      return `<g fill="${c}">
+        <circle cx="200" cy="58" r="14"/>
+        <rect x="190" y="76" width="20" height="46" rx="8"/>
+        <rect x="163" y="80" width="34" height="10" rx="5" transform="rotate(-20 180 85)"/>
+        <rect x="203" y="80" width="34" height="10" rx="5" transform="rotate(20 220 85)"/>
+        <rect x="176" y="118" width="12" height="46" rx="6" transform="rotate(-24 182 141)"/>
+        <rect x="208" y="118" width="12" height="46" rx="6" transform="rotate(18 214 141)"/>
+      </g>`;
+    default:
+      return "";
+  }
+}
+
+function buildPresetSVG({ colors: [c1, c2], icon }) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${c1}"/>
+        <stop offset="1" stop-color="${c2}"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="200" fill="url(#g)"/>
+    ${coverIconSVG(icon)}
+  </svg>`;
+  return "data:image/svg+xml;base64," + btoa(svg);
+}
+
+const COVER_PRESETS = [
+  { colors: ["#f97316", "#ec4899"], icon: "barbell" },
+  { colors: ["#0ea5e9", "#14b8a6"], icon: "wave" },
+  { colors: ["#7c3aed", "#f97316"], icon: "mountain" },
+  { colors: ["#16a34a", "#4ade80"], icon: "mountain" },
+  { colors: ["#0f172a", "#334155"], icon: "sun" },
+  { colors: ["#d946ef", "#6366f1"], icon: "burst" },
+  { colors: ["#facc15", "#f97316"], icon: "runner" },
+  { colors: ["#64748b", "#1e293b"], icon: "barbell" },
+  { colors: ["#ec4899", "#a855f7"], icon: "wave" },
+  { colors: ["#84cc16", "#22c55e"], icon: "burst" },
+  { colors: ["#6c5ce7", "#5341d6"], icon: "barbell" },
+  { colors: ["#ef4444", "#f97316"], icon: "runner" },
+  { colors: ["#06b6d4", "#0891b2"], icon: "mountain" },
+  { colors: ["#111827", "#374151"], icon: "barbell" },
+  { colors: ["#fda4af", "#fdba74"], icon: "sun" },
+].map((p, i) => ({ id: `preset-${i}`, ...p, dataUrl: buildPresetSVG(p) }));
+
+function renderCoverPresetGrid() {
+  document.getElementById("cover-preset-grid").innerHTML = COVER_PRESETS.map((p) => `
+    <button type="button" class="cover-preset-tile" data-id="${p.id}" style="background-image:url('${p.dataUrl}')"></button>
+  `).join("");
+}
+
+/* ---------- Toast ---------- */
+
+let toastTimeout = null;
+
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.add("hidden"), 2500);
+}
+
+/* ---------- Progress photos (IndexedDB) ---------- */
+
+const PHOTO_DB_NAME = "workout-tracker-db";
+const PHOTO_STORE = "photos";
+let photoDbPromise = null;
+
+function openPhotoDB() {
+  if (photoDbPromise) return photoDbPromise;
+  photoDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(PHOTO_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(PHOTO_STORE)) {
+        req.result.createObjectStore(PHOTO_STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return photoDbPromise;
+}
+
+async function addPhoto(record) {
+  const db = await openPhotoDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PHOTO_STORE, "readwrite");
+    tx.objectStore(PHOTO_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getAllPhotos() {
+  const db = await openPhotoDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(PHOTO_STORE, "readonly").objectStore(PHOTO_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deletePhoto(id) {
+  const db = await openPhotoDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PHOTO_STORE, "readwrite");
+    tx.objectStore(PHOTO_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function renderPhotoGallery() {
+  const container = document.getElementById("photo-gallery");
+  const photos = (await getAllPhotos()).sort((a, b) => b.date.localeCompare(a.date));
+
+  if (photos.length === 0) {
+    container.innerHTML = `<p class="empty-state">Aucune photo encore. Ajoute ta première photo de progression.</p>`;
+    return;
+  }
+
+  container.innerHTML = photos.map((p) => `
+    <div class="photo-card">
+      <img src="${p.dataUrl}" alt="Photo du ${formatDateShort(p.date)}">
+      <div class="photo-date">${formatDateShort(p.date)}</div>
+      <button type="button" class="photo-delete" data-id="${p.id}">✕</button>
+    </div>
+  `).join("");
+}
+
+document.getElementById("progress-mode-toggle").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-mode]");
+  if (!btn) return;
+  document.querySelectorAll("#progress-mode-toggle button").forEach((b) => b.classList.toggle("active", b === btn));
+  const mode = btn.dataset.mode;
+  document.getElementById("progress-chart-mode").classList.toggle("hidden", mode !== "chart");
+  document.getElementById("progress-bodyweight-mode").classList.toggle("hidden", mode !== "bodyweight");
+  document.getElementById("progress-photo-mode").classList.toggle("hidden", mode !== "photos");
+  if (mode === "photos") renderPhotoGallery();
+  if (mode === "bodyweight") renderBodyweight();
+});
+
+document.getElementById("add-photo-btn").addEventListener("click", () => {
+  document.getElementById("photo-upload-input").click();
+});
+
+document.getElementById("photo-upload-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const dataUrl = await compressImage(file, 900, 0.75);
+  await addPhoto({ id: crypto.randomUUID(), date: new Date().toISOString().slice(0, 10), dataUrl });
+  e.target.value = "";
+  renderPhotoGallery();
+});
+
+document.getElementById("photo-gallery").addEventListener("click", async (e) => {
+  if (e.target.matches(".photo-delete")) {
+    if (!confirm("Supprimer cette photo ?")) return;
+    await deletePhoto(e.target.dataset.id);
+    renderPhotoGallery();
+    return;
+  }
+  if (e.target.tagName === "IMG") {
+    document.getElementById("photo-lightbox-img").src = e.target.src;
+    document.getElementById("photo-lightbox").classList.remove("hidden");
+  }
+});
+
+document.getElementById("photo-lightbox-close").addEventListener("click", () => {
+  document.getElementById("photo-lightbox").classList.add("hidden");
+});
 
 /* ---------- Rest timer ---------- */
 
@@ -116,6 +449,45 @@ function stopRestTimer() {
 }
 
 document.getElementById("rest-timer-skip").addEventListener("click", stopRestTimer);
+
+/* ---------- Action menu (⋯) ---------- */
+
+let actionMenuContext = null;
+
+function openActionMenu(btn, type, id) {
+  actionMenuContext = { type, id };
+  const menu = document.getElementById("action-menu");
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.right = `${window.innerWidth - rect.right}px`;
+  menu.style.left = "auto";
+  menu.classList.remove("hidden");
+}
+
+function closeActionMenu() {
+  document.getElementById("action-menu").classList.add("hidden");
+  actionMenuContext = null;
+}
+
+document.getElementById("action-menu-edit").addEventListener("click", () => {
+  const ctx = actionMenuContext;
+  closeActionMenu();
+  if (!ctx) return;
+  if (ctx.type === "log") editLogEntry(ctx.id);
+  else editWorkout(ctx.id);
+});
+
+document.getElementById("action-menu-delete").addEventListener("click", () => {
+  const ctx = actionMenuContext;
+  closeActionMenu();
+  if (!ctx) return;
+  if (ctx.type === "log") deleteLogEntry(ctx.id);
+  else deleteWorkout(ctx.id);
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".menu-btn") && !e.target.closest("#action-menu")) closeActionMenu();
+});
 
 /* ---------- Encouragement ---------- */
 
@@ -238,10 +610,7 @@ function renderLog() {
               <span>${entry.weight} lb × ${entry.sets} séries × ${entry.reps} reps</span>
               ${entry.workoutName ? `<span class="tag">${entry.workoutName}</span>` : ""}
             </div>
-            <div class="entry-actions">
-              <button class="edit-btn" data-id="${entry.id}">✎</button>
-              <button class="delete-btn" data-id="${entry.id}">✕</button>
-            </div>
+            <button class="menu-btn" data-id="${entry.id}">⋯</button>
           </div>
         `).join("")}
       </div>
@@ -264,6 +633,7 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
   const weight = Number(document.getElementById("weight").value);
   const sets = Number(document.getElementById("sets").value);
   const reps = Number(document.getElementById("reps").value);
+  const previousBest = Math.max(0, ...logs.filter((l) => l.exercise === exercise).map((l) => l.weight));
 
   if (editingLogId) {
     const entry = logs.find((l) => l.id === editingLogId);
@@ -290,6 +660,7 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
 
   const wasEditing = Boolean(editingLogId);
   if (!wasEditing) {
+    if (previousBest > 0 && weight > previousBest) showToast(`🏆 Nouveau record : ${weight} lb !`);
     const progEx = program?.exercises.find((pe) => pe.name === exercise);
     if (progEx?.rest) startRestTimer(progEx.rest);
   }
@@ -307,29 +678,31 @@ document.getElementById("log-cancel-btn").addEventListener("click", () => {
   closeExerciseDropdown();
 });
 
-document.getElementById("log-list").addEventListener("click", (e) => {
-  if (e.target.matches(".delete-btn")) {
-    if (!confirm("Supprimer ce log ?")) return;
-    logs = logs.filter((log) => log.id !== e.target.dataset.id);
-    saveLogs();
-    renderLog();
-    return;
-  }
+function editLogEntry(id) {
+  const entry = logs.find((l) => l.id === id);
+  if (!entry) return;
+  editingLogId = entry.id;
+  document.getElementById("program-select").value = entry.workoutId || "";
+  exerciseInput.value = entry.exercise;
+  document.getElementById("weight").value = entry.weight;
+  document.getElementById("sets").value = entry.sets;
+  document.getElementById("reps").value = entry.reps;
+  document.getElementById("log-submit-btn").textContent = "Mettre à jour";
+  document.getElementById("log-cancel-btn").classList.remove("hidden");
+  switchView("view-log");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
-  if (e.target.matches(".edit-btn")) {
-    const entry = logs.find((l) => l.id === e.target.dataset.id);
-    if (!entry) return;
-    editingLogId = entry.id;
-    document.getElementById("program-select").value = entry.workoutId || "";
-    exerciseInput.value = entry.exercise;
-    document.getElementById("weight").value = entry.weight;
-    document.getElementById("sets").value = entry.sets;
-    document.getElementById("reps").value = entry.reps;
-    document.getElementById("log-submit-btn").textContent = "Mettre à jour";
-    document.getElementById("log-cancel-btn").classList.remove("hidden");
-    switchView("view-log");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+function deleteLogEntry(id) {
+  if (!confirm("Supprimer ce log ?")) return;
+  logs = logs.filter((log) => log.id !== id);
+  saveLogs();
+  renderLog();
+}
+
+document.getElementById("log-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".menu-btn");
+  if (btn) openActionMenu(btn, "log", btn.dataset.id);
 });
 
 /* ---------- Workouts (programmes) view ---------- */
@@ -380,6 +753,55 @@ function renderDraftChips() {
     `)
     .join("");
 }
+
+function updateCoverPreview() {
+  const img = document.getElementById("workout-cover-preview");
+  const removeBtn = document.getElementById("workout-cover-remove");
+  if (draftCover) {
+    img.src = draftCover;
+    img.classList.remove("hidden");
+    removeBtn.classList.remove("hidden");
+  } else {
+    img.classList.add("hidden");
+    removeBtn.classList.add("hidden");
+  }
+}
+
+document.getElementById("workout-cover-btn").addEventListener("click", () => {
+  renderCoverPresetGrid();
+  document.getElementById("cover-picker-overlay").classList.remove("hidden");
+});
+
+document.getElementById("cover-picker-close").addEventListener("click", () => {
+  document.getElementById("cover-picker-overlay").classList.add("hidden");
+});
+
+document.getElementById("cover-preset-grid").addEventListener("click", (e) => {
+  const tile = e.target.closest(".cover-preset-tile");
+  if (!tile) return;
+  const preset = COVER_PRESETS.find((p) => p.id === tile.dataset.id);
+  draftCover = preset.dataUrl;
+  updateCoverPreview();
+  document.getElementById("cover-picker-overlay").classList.add("hidden");
+});
+
+document.getElementById("cover-upload-btn").addEventListener("click", () => {
+  document.getElementById("cover-picker-overlay").classList.add("hidden");
+  document.getElementById("workout-cover-input").click();
+});
+
+document.getElementById("workout-cover-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  draftCover = await compressImage(file, 600, 0.7);
+  updateCoverPreview();
+  e.target.value = "";
+});
+
+document.getElementById("workout-cover-remove").addEventListener("click", () => {
+  draftCover = null;
+  updateCoverPreview();
+});
 
 document.getElementById("add-exercise-btn").addEventListener("click", addDraftExercise);
 newExerciseInput.addEventListener("keydown", (e) => {
@@ -436,7 +858,9 @@ document.getElementById("draft-exercise-list").addEventListener("click", (e) => 
 function resetWorkoutForm() {
   editingWorkoutId = null;
   draftExercises = [];
+  draftCover = null;
   renderDraftChips();
+  updateCoverPreview();
   document.getElementById("workout-form").reset();
   document.getElementById("workout-submit-btn").textContent = "Enregistrer le programme";
   document.getElementById("workout-cancel-btn").classList.add("hidden");
@@ -450,11 +874,13 @@ document.getElementById("workout-form").addEventListener("submit", (e) => {
   if (editingWorkoutId) {
     const w = workouts.find((w) => w.id === editingWorkoutId);
     w.name = name;
+    w.cover = draftCover;
     w.exercises = draftExercises.map((ex) => ({ ...ex }));
   } else {
     workouts.push({
       id: crypto.randomUUID(),
       name,
+      cover: draftCover,
       exercises: draftExercises.map((ex) => ({ ...ex })),
     });
   }
@@ -478,12 +904,10 @@ function renderWorkouts() {
   container.innerHTML = workouts
     .map((w) => `
       <div class="workout-card">
+        ${w.cover ? `<img src="${w.cover}" class="workout-cover" alt="${w.name}">` : ""}
         <div class="workout-card-head">
           <h3>${w.name}</h3>
-          <div class="entry-actions">
-            <button class="edit-btn" data-id="${w.id}">✎</button>
-            <button class="delete-btn" data-id="${w.id}">✕</button>
-          </div>
+          <button class="menu-btn" data-id="${w.id}">⋯</button>
         </div>
         ${labelExerciseGroups(w.exercises).map((ex) => `
           <div class="workout-exercise-row ${ex.inSuperset ? "in-superset" : ""}">
@@ -498,33 +922,37 @@ function renderWorkouts() {
     .join("");
 }
 
+function editWorkout(id) {
+  const w = workouts.find((w) => w.id === id);
+  if (!w) return;
+  editingWorkoutId = w.id;
+  document.getElementById("workout-name").value = w.name;
+  draftExercises = w.exercises.map((ex) => ({ ...ex }));
+  draftCover = w.cover || null;
+  renderDraftChips();
+  updateCoverPreview();
+  document.getElementById("workout-submit-btn").textContent = "Mettre à jour le programme";
+  document.getElementById("workout-cancel-btn").classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function deleteWorkout(id) {
+  if (!confirm("Supprimer ce programme ?")) return;
+  workouts = workouts.filter((w) => w.id !== id);
+  if (editingWorkoutId === id) resetWorkoutForm();
+  saveWorkouts();
+  renderWorkouts();
+  populateProgramSelect();
+}
+
 document.getElementById("workout-list").addEventListener("click", (e) => {
-  if (e.target.matches(".delete-btn")) {
-    if (!confirm("Supprimer ce programme ?")) return;
-    workouts = workouts.filter((w) => w.id !== e.target.dataset.id);
-    if (editingWorkoutId === e.target.dataset.id) resetWorkoutForm();
-    saveWorkouts();
-    renderWorkouts();
-    populateProgramSelect();
-    return;
-  }
-
-  if (e.target.matches(".edit-btn")) {
-    const w = workouts.find((w) => w.id === e.target.dataset.id);
-    if (!w) return;
-    editingWorkoutId = w.id;
-    document.getElementById("workout-name").value = w.name;
-    draftExercises = w.exercises.map((ex) => ({ ...ex }));
-    renderDraftChips();
-    document.getElementById("workout-submit-btn").textContent = "Mettre à jour le programme";
-    document.getElementById("workout-cancel-btn").classList.remove("hidden");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return;
-  }
-
   if (e.target.matches(".start-btn")) {
     startGuidedSession(e.target.dataset.id);
+    return;
   }
+
+  const btn = e.target.closest(".menu-btn");
+  if (btn) openActionMenu(btn, "workout", btn.dataset.id);
 });
 
 /* ---------- Progress view ---------- */
@@ -678,6 +1106,15 @@ function startGuidedSession(programId) {
   guidedSteps = labelExerciseGroups(program.exercises);
   guidedIndex = 0;
   guidedProgramName = program.name;
+
+  const coverImg = document.getElementById("guided-cover");
+  if (program.cover) {
+    coverImg.src = program.cover;
+    coverImg.classList.remove("hidden");
+  } else {
+    coverImg.classList.add("hidden");
+  }
+
   document.getElementById("guided-overlay").classList.remove("hidden");
   renderGuidedStep();
 }
@@ -744,11 +1181,13 @@ document.getElementById("guided-form").addEventListener("submit", (e) => {
   const step = guidedSteps[guidedIndex];
   const program = workouts.find((w) => w.name === guidedProgramName);
   const now = new Date();
+  const weight = Number(document.getElementById("guided-weight").value);
+  const previousBest = Math.max(0, ...logs.filter((l) => l.exercise === step.name).map((l) => l.weight));
 
   logs.push({
     id: crypto.randomUUID(),
     exercise: step.name,
-    weight: Number(document.getElementById("guided-weight").value),
+    weight,
     sets: Number(document.getElementById("guided-sets").value),
     reps: Number(document.getElementById("guided-reps").value),
     date: now.toISOString().slice(0, 10),
@@ -757,6 +1196,8 @@ document.getElementById("guided-form").addEventListener("submit", (e) => {
     workoutName: program ? program.name : null,
   });
   saveLogs();
+
+  if (previousBest > 0 && weight > previousBest) showToast(`🏆 Nouveau record : ${weight} lb !`);
 
   advanceGuidedStep();
 });
@@ -772,7 +1213,7 @@ document.getElementById("guided-close").addEventListener("click", closeGuidedSes
 /* ---------- Réglages (backup) ---------- */
 
 document.getElementById("export-btn").addEventListener("click", () => {
-  const payload = { logs, workouts, exportedAt: new Date().toISOString() };
+  const payload = { logs, workouts, bodyweights, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -812,14 +1253,17 @@ document.getElementById("import-file").addEventListener("change", (e) => {
 
     logs = data.logs;
     workouts = data.workouts;
+    bodyweights = Array.isArray(data.bodyweights) ? data.bodyweights : [];
     saveLogs();
     saveWorkouts();
+    saveBodyweights();
     resetLogForm();
     resetWorkoutForm();
     populateProgramSelect();
     renderLog();
     renderWorkouts();
     renderProgress();
+    renderBodyweight();
     e.target.value = "";
     alert("Sauvegarde importée !");
   };

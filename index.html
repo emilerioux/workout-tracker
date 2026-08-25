@@ -74,6 +74,16 @@
           <input type="text" id="workout-name" placeholder="Ex: Push Day">
         </div>
 
+        <div class="field">
+          <label>Photo de couverture (optionnel)</label>
+          <div class="cover-picker">
+            <img id="workout-cover-preview" class="cover-preview hidden" alt="Aperçu de la couverture">
+            <button type="button" id="workout-cover-btn" class="secondary-btn">Choisir une image</button>
+            <button type="button" id="workout-cover-remove" class="secondary-btn hidden">Retirer</button>
+          </div>
+          <input type="file" id="workout-cover-input" accept="image/*" class="hidden">
+        </div>
+
         <div class="exercise-builder">
           <div class="field">
             <label for="new-exercise-name">Exercice</label>
@@ -120,22 +130,58 @@
 
     <!-- ONGLET: PROGRESSION -->
     <section id="view-progress" class="view">
-      <div class="field">
-        <label for="progress-exercise-select">Exercice</label>
-        <select id="progress-exercise-select"></select>
+      <div class="segmented" id="progress-mode-toggle">
+        <button type="button" data-mode="chart" class="active">📈 Exercices</button>
+        <button type="button" data-mode="bodyweight">⚖️ Poids</button>
+        <button type="button" data-mode="photos">📷 Photos</button>
       </div>
 
-      <div class="segmented" id="metric-toggle">
-        <button type="button" data-metric="weight" class="active">Poids</button>
-        <button type="button" data-metric="reps">Reps</button>
+      <div id="progress-chart-mode">
+        <div class="field">
+          <label for="progress-exercise-select">Exercice</label>
+          <select id="progress-exercise-select"></select>
+        </div>
+
+        <div class="segmented" id="metric-toggle">
+          <button type="button" data-metric="weight" class="active">Poids</button>
+          <button type="button" data-metric="reps">Reps</button>
+        </div>
+
+        <div id="progress-stats" class="progress-stats"></div>
+        <div id="chart-container"></div>
       </div>
 
-      <div id="progress-stats" class="progress-stats"></div>
-      <div id="chart-container"></div>
+      <div id="progress-bodyweight-mode" class="hidden">
+        <form id="bodyweight-form" class="bodyweight-form">
+          <div class="field">
+            <label for="bodyweight-input">Poids (lb)</label>
+            <input type="number" id="bodyweight-input" step="0.1" min="0" required>
+          </div>
+          <button type="submit">Ajouter</button>
+        </form>
+        <div id="bodyweight-stats" class="progress-stats"></div>
+        <div id="bodyweight-chart-container"></div>
+        <div id="bodyweight-list" class="bodyweight-list"></div>
+      </div>
+
+      <div id="progress-photo-mode" class="hidden">
+        <button type="button" id="add-photo-btn" class="secondary-btn">+ Ajouter une photo</button>
+        <input type="file" id="photo-upload-input" accept="image/*" class="hidden">
+        <div id="photo-gallery" class="photo-gallery"></div>
+      </div>
     </section>
 
     <!-- ONGLET: RÉGLAGES -->
     <section id="view-settings" class="view">
+      <div class="settings-card">
+        <h3>Apparence</h3>
+        <label class="switch-row" for="dark-mode-toggle">
+          <span>🌙 Mode sombre</span>
+          <input type="checkbox" id="dark-mode-toggle">
+          <span class="switch"></span>
+        </label>
+      </div>
+
       <div class="settings-card">
         <h3>Sauvegarde</h3>
         <p class="settings-hint">Tes données sont stockées seulement sur ce téléphone. Exporte-les de temps en temps pour ne rien perdre.</p>
@@ -165,9 +211,15 @@
     </button>
   </nav>
 
+  <div id="action-menu" class="action-menu hidden">
+    <button type="button" id="action-menu-edit">✎ Modifier</button>
+    <button type="button" id="action-menu-delete">✕ Supprimer</button>
+  </div>
+
   <div id="guided-overlay" class="guided-overlay hidden">
     <div class="guided-card">
       <div id="guided-step">
+        <img id="guided-cover" class="guided-cover hidden" alt="">
         <div class="guided-progress" id="guided-progress"></div>
         <div class="guided-exercise">
           <span class="superset-badge hidden" id="guided-superset-badge"></span>
@@ -206,6 +258,24 @@
       </div>
     </div>
   </div>
+
+  <div id="cover-picker-overlay" class="cover-picker-overlay hidden">
+    <div class="cover-picker-card">
+      <div class="cover-picker-head">
+        <h3>Choisir une couverture</h3>
+        <button type="button" id="cover-picker-close">✕</button>
+      </div>
+      <div id="cover-preset-grid" class="cover-preset-grid"></div>
+      <button type="button" id="cover-upload-btn" class="secondary-btn">📁 Choisir depuis mes photos</button>
+    </div>
+  </div>
+
+  <div id="photo-lightbox" class="photo-lightbox hidden">
+    <img id="photo-lightbox-img" src="" alt="Photo de progression">
+    <button type="button" id="photo-lightbox-close">✕</button>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
 </body>

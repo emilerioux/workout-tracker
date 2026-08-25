@@ -10,6 +10,28 @@
   --card: #ffffff;
   --text: #1a1a1a;
   --muted: #888;
+  --border: #e0e0e5;
+  --border-soft: #f2f2f5;
+  --tint: #eae8f4;
+  --tint-accent: #e6f9f4;
+  --hover: #f0edfd;
+  --danger: #c0392b;
+}
+
+:root[data-theme="dark"] {
+  --primary: #8b7cf6;
+  --primary-dark: #6c5ce7;
+  --accent: #2dd4a7;
+  --bg: #15141c;
+  --card: #211f2b;
+  --text: #f1eef8;
+  --muted: #9791ab;
+  --border: #3a3747;
+  --border-soft: #2b2836;
+  --tint: #2b2740;
+  --tint-accent: #16332c;
+  --hover: #322c47;
+  --danger: #ff6b6b;
 }
 
 body {
@@ -18,6 +40,7 @@ body {
   background: var(--bg);
   color: var(--text);
   padding-bottom: 80px;
+  transition: background 0.2s, color 0.2s;
 }
 
 header {
@@ -91,9 +114,9 @@ select {
   width: 100%;
   font-size: 16px;
   padding: 10px;
-  border: 1px solid #e0e0e5;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: white;
+  background: var(--card);
   color: var(--text);
   font-family: inherit;
 }
@@ -138,8 +161,8 @@ button:active {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e0e0e5;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
   max-height: 180px;
@@ -159,7 +182,7 @@ button:active {
 
 .combobox-option:hover,
 .combobox-option:active {
-  background: #f0edfd;
+  background: var(--hover);
 }
 
 .combobox-empty {
@@ -178,7 +201,7 @@ button:active {
 }
 
 .secondary-btn {
-  background: #eee;
+  background: var(--tint);
   color: var(--text);
 }
 
@@ -198,6 +221,7 @@ button:active {
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  margin-bottom: 14px;
 }
 
 .settings-card h3 {
@@ -210,23 +234,95 @@ button:active {
   margin: 0 0 14px;
 }
 
-.edit-btn {
-  background: none;
-  border: none;
-  color: var(--primary);
-  font-size: 16px;
-  width: auto;
-  padding: 4px 6px;
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  cursor: pointer;
 }
 
-.entry-actions {
-  display: flex;
-  gap: 2px;
+.switch-row input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch {
+  width: 44px;
+  height: 26px;
+  background: var(--tint);
+  border-radius: 13px;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+}
+
+.switch-row input:checked + .switch {
+  background: var(--primary);
+}
+
+.switch-row input:checked + .switch::before {
+  transform: translateX(18px);
+}
+
+.menu-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  width: auto;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
+.action-menu {
+  position: fixed;
+  z-index: 40;
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  min-width: 150px;
+}
+
+.action-menu button {
+  width: 100%;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 0;
+}
+
+.action-menu button:active {
+  background: var(--hover);
+}
+
+.action-menu #action-menu-delete {
+  color: var(--danger);
 }
 
 .exercise-builder {
-  background: #f8f7fc;
-  border: 1px dashed #d8d4ee;
+  background: var(--tint);
+  border: 1px dashed var(--border);
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 14px;
@@ -265,7 +361,7 @@ button:active {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: white;
+  background: var(--card);
   border-radius: 10px;
   padding: 10px 12px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -274,7 +370,7 @@ button:active {
 
 .draft-card.in-superset {
   border-left-color: var(--accent);
-  background: #f2fbf9;
+  background: var(--tint-accent);
 }
 
 .draft-card .group-label {
@@ -319,7 +415,7 @@ button:active {
 }
 
 .draft-card .draft-actions .remove-draft {
-  color: #c0392b;
+  color: var(--danger);
 }
 
 .superset-badge {
@@ -329,7 +425,7 @@ button:active {
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--accent);
-  background: #e6f9f4;
+  background: var(--tint-accent);
   padding: 1px 6px;
   border-radius: 8px;
 }
@@ -372,18 +468,9 @@ button:active {
   margin-top: 4px;
   font-size: 11px;
   color: var(--accent);
-  background: #e6f9f4;
+  background: var(--tint-accent);
   padding: 2px 8px;
   border-radius: 10px;
-}
-
-.log-entry .delete-btn {
-  background: none;
-  border: none;
-  color: #c0392b;
-  font-size: 18px;
-  width: auto;
-  padding: 4px 8px;
 }
 
 .empty-state {
@@ -414,21 +501,12 @@ button:active {
   font-size: 16px;
 }
 
-.workout-card .delete-btn {
-  background: none;
-  border: none;
-  color: #c0392b;
-  font-size: 16px;
-  width: auto;
-  padding: 2px 6px;
-}
-
 .workout-exercise-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
   padding: 4px 0;
-  border-top: 1px solid #f2f2f5;
+  border-top: 1px solid var(--border-soft);
 }
 
 .workout-exercise-row:first-of-type {
@@ -462,7 +540,7 @@ button:active {
 
 .segmented {
   display: flex;
-  background: #eae8f4;
+  background: var(--tint);
   border-radius: 10px;
   padding: 3px;
   margin-bottom: 16px;
@@ -473,12 +551,13 @@ button:active {
   background: none;
   color: var(--muted);
   font-weight: 600;
-  padding: 8px 0;
+  font-size: 13px;
+  padding: 8px 2px;
   border-radius: 8px;
 }
 
 .segmented button.active {
-  background: white;
+  background: var(--card);
   color: var(--primary-dark);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
@@ -509,6 +588,62 @@ button:active {
   color: var(--muted);
 }
 
+.bodyweight-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  margin-bottom: 16px;
+}
+
+.bodyweight-form .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.bodyweight-form button {
+  width: auto;
+  padding: 10px 18px;
+}
+
+.bodyweight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.bodyweight-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.bodyweight-row span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.bodyweight-row strong {
+  flex: 1;
+  font-size: 15px;
+}
+
+.bodyweight-row .bw-delete {
+  width: auto;
+  background: none;
+  color: var(--danger);
+  padding: 4px 8px;
+  font-size: 16px;
+}
+
 #chart-container {
   background: var(--card);
   border-radius: 14px;
@@ -533,7 +668,7 @@ button:active {
 }
 
 .chart-grid {
-  stroke: #eee;
+  stroke: var(--border-soft);
   stroke-width: 1;
 }
 
@@ -582,7 +717,7 @@ button:active {
 }
 
 .guided-card {
-  background: white;
+  background: var(--card);
   border-radius: 16px;
   padding: 22px 20px;
   width: 100%;
@@ -637,6 +772,223 @@ button:active {
   background: var(--accent);
 }
 
+/* Animations */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.view.active {
+  animation: fadeInUp 0.25s ease;
+}
+
+.log-entry,
+.workout-card,
+.draft-card,
+.photo-card {
+  animation: fadeInUp 0.2s ease;
+}
+
+/* Toast */
+
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  color: white;
+  padding: 12px 22px;
+  border-radius: 30px;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  z-index: 90;
+  animation: toastIn 0.3s ease;
+  white-space: nowrap;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Program cover */
+
+.cover-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cover-picker button {
+  width: auto;
+}
+
+.cover-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.workout-cover {
+  width: calc(100% + 32px);
+  height: 120px;
+  object-fit: cover;
+  margin: -14px -16px 12px;
+  border-radius: 12px 12px 0 0;
+  display: block;
+}
+
+.cover-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cover-picker-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 18px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.cover-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.cover-picker-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.cover-picker-head button {
+  width: auto;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 4px 6px;
+}
+
+.cover-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cover-preset-tile {
+  aspect-ratio: 2 / 1;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid transparent;
+  padding: 0;
+}
+
+.cover-preset-tile:active {
+  border-color: var(--primary);
+}
+
+.guided-cover {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+/* Progress photos */
+
+.photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.photo-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--card);
+}
+
+.photo-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+.photo-card .photo-date {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.photo-card .photo-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.photo-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+}
+
+.photo-lightbox button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 16px;
+  padding: 0;
+}
+
 /* Bottom nav */
 
 #bottom-nav {
@@ -646,7 +998,7 @@ button:active {
   right: 0;
   background: var(--card);
   display: flex;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
