@@ -137,6 +137,11 @@ button:active {
   opacity: 0.7;
 }
 
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .combobox-wrap {
   position: relative;
 }
@@ -183,6 +188,15 @@ button:active {
 .combobox-option:hover,
 .combobox-option:active {
   background: var(--hover);
+}
+
+.exercise-note-hint {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .combobox-empty {
@@ -418,6 +432,10 @@ button:active {
   color: var(--danger);
 }
 
+.draft-card .draft-actions .edit-draft {
+  color: var(--primary);
+}
+
 .superset-badge {
   display: inline-block;
   margin-top: 3px;
@@ -503,7 +521,7 @@ button:active {
 
 .workout-exercise-row {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
   padding: 4px 0;
   border-top: 1px solid var(--border-soft);
@@ -519,10 +537,22 @@ button:active {
   color: var(--muted);
   width: 18px;
   flex-shrink: 0;
+  padding-top: 2px;
 }
 
 .workout-exercise-row.in-superset .group-label {
   color: var(--accent);
+}
+
+.workout-exercise-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.workout-exercise-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .workout-exercise-row .ex-name {
@@ -748,10 +778,18 @@ button:active {
   color: var(--muted);
 }
 
-.guided-footer {
+.guided-nav-row {
   display: flex;
   gap: 10px;
   margin-top: 12px;
+}
+
+.guided-nav-row button {
+  flex: 1;
+}
+
+.guided-quit-btn {
+  margin-top: 8px;
 }
 
 #guided-done {
@@ -903,6 +941,76 @@ button:active {
 
 .cover-preset-tile:active {
   border-color: var(--primary);
+}
+
+/* Exercise manager */
+
+.exercise-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exercise-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--tint);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.exercise-manager-row.editing {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.exercise-manager-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.exercise-manager-info strong {
+  display: block;
+  font-size: 14px;
+}
+
+.exercise-manager-note {
+  display: block;
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.exercise-manager-row .edit-btn {
+  width: auto;
+  background: none;
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.exercise-manager-row textarea {
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* Compact per-exercise note shown in log/program lists */
+
+.ex-note {
+  display: block;
+  font-size: 11px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
 }
 
 .guided-cover {

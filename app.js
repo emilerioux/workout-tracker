@@ -2,6 +2,7 @@ const LOGS_KEY = "workout-logs";
 const WORKOUTS_KEY = "workout-templates";
 const BODYWEIGHT_KEY = "bodyweight-logs";
 const THEME_KEY = "theme-preference";
+const EXERCISE_NOTES_KEY = "exercise-notes";
 
 const ENCOURAGEMENTS = [
   "Chaque séance compte 💪",
@@ -43,11 +44,23 @@ function saveBodyweights() {
   localStorage.setItem(BODYWEIGHT_KEY, JSON.stringify(bodyweights));
 }
 
+function loadExerciseNotes() {
+  const raw = localStorage.getItem(EXERCISE_NOTES_KEY);
+  return raw ? JSON.parse(raw) : {};
+}
+
+function saveExerciseNotes() {
+  localStorage.setItem(EXERCISE_NOTES_KEY, JSON.stringify(exerciseNotes));
+}
+
 let logs = loadLogs();
 let workouts = loadWorkouts();
 let bodyweights = loadBodyweights();
+let exerciseNotes = loadExerciseNotes();
+let editingExerciseName = null;
 let draftExercises = [];
 let draftCover = null;
+let editingDraftIndex = null;
 let editingLogId = null;
 let editingWorkoutId = null;
 
@@ -93,6 +106,101 @@ document.getElementById("dark-mode-toggle").addEventListener("change", (e) => {
   const theme = e.target.checked ? "dark" : "light";
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(theme);
+});
+
+/* ---------- Exercise registry (rename + notes) ---------- */
+
+function renameExerciseEverywhere(oldName, newName) {
+  if (!newName || oldName === newName) return;
+
+  logs.forEach((l) => { if (l.exercise === oldName) l.exercise = newName; });
+  workouts.forEach((w) => w.exercises.forEach((ex) => { if (ex.name === oldName) ex.name = newName; }));
+
+  if (exerciseNotes[oldName] !== undefined) {
+    exerciseNotes[newName] = exerciseNotes[oldName];
+    delete exerciseNotes[oldName];
+  }
+
+  saveLogs();
+  saveWorkouts();
+  saveExerciseNotes();
+}
+
+function renderExerciseManager() {
+  const container = document.getElementById("exercise-manager-list");
+  const names = allExerciseNames();
+
+  if (names.length === 0) {
+    container.innerHTML = `<p class="empty-state">Aucun exercice encore.</p>`;
+    return;
+  }
+
+  container.innerHTML = names.map((name) => {
+    if (name === editingExerciseName) {
+      return `
+        <div class="exercise-manager-row editing">
+          <input type="text" id="exercise-manager-name-input" value="${name}">
+          <textarea id="exercise-manager-note-input" placeholder="Note (ex: grip large, attention à l'épaule)" rows="2">${exerciseNotes[name] || ""}</textarea>
+          <div class="form-actions">
+            <button type="button" id="exercise-manager-save">Enregistrer</button>
+            <button type="button" id="exercise-manager-cancel" class="secondary-btn">Annuler</button>
+          </div>
+        </div>
+      `;
+    }
+    const note = exerciseNotes[name];
+    return `
+      <div class="exercise-manager-row">
+        <div class="exercise-manager-info">
+          <strong>${name}</strong>
+          ${note ? `<span class="exercise-manager-note">📝 ${note}</span>` : ""}
+        </div>
+        <button type="button" class="edit-btn" data-name="${name}">✎</button>
+      </div>
+    `;
+  }).join("");
+}
+
+document.getElementById("manage-exercises-btn").addEventListener("click", () => {
+  editingExerciseName = null;
+  renderExerciseManager();
+  document.getElementById("exercise-manager-overlay").classList.remove("hidden");
+});
+
+document.getElementById("exercise-manager-close").addEventListener("click", () => {
+  document.getElementById("exercise-manager-overlay").classList.add("hidden");
+});
+
+document.getElementById("exercise-manager-list").addEventListener("click", (e) => {
+  if (e.target.matches(".edit-btn")) {
+    editingExerciseName = e.target.dataset.name;
+    renderExerciseManager();
+    return;
+  }
+
+  if (e.target.id === "exercise-manager-cancel") {
+    editingExerciseName = null;
+    renderExerciseManager();
+    return;
+  }
+
+  if (e.target.id === "exercise-manager-save") {
+    const oldName = editingExerciseName;
+    const newName = document.getElementById("exercise-manager-name-input").value.trim();
+    const note = document.getElementById("exercise-manager-note-input").value.trim();
+    if (!newName) return;
+
+    if (newName !== oldName) renameExerciseEverywhere(oldName, newName);
+    if (note) exerciseNotes[newName] = note;
+    else delete exerciseNotes[newName];
+    saveExerciseNotes();
+
+    editingExerciseName = null;
+    renderExerciseManager();
+    renderLog();
+    renderWorkouts();
+    renderProgress();
+  }
 });
 
 /* ---------- Bodyweight tracking ---------- */
@@ -572,7 +680,35 @@ function prefillFromProgram(name) {
   }
 }
 
-const exerciseCombobox = setupCombobox(exerciseInput, document.getElementById("exercise-dropdown"), exerciseSuggestionSource, prefillFromProgram);
+function updateExerciseNoteHint() {
+  const hint = document.getElementById("exercise-note-hint");
+  const note = exerciseNotes[exerciseInput.value.trim()];
+  if (note) {
+    hint.textContent = `📝 ${note}`;
+    hint.classList.remove("hidden");
+  } else {
+    hint.classList.add("hidden");
+  }
+}
+
+function updateWeightPlaceholder() {
+  const exercise = exerciseInput.value.trim();
+  const lastEntry = logs
+    .filter((l) => l.exercise === exercise)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  document.getElementById("weight").placeholder = lastEntry ? String(lastEntry.weight) : "";
+}
+
+exerciseInput.addEventListener("input", () => {
+  updateExerciseNoteHint();
+  updateWeightPlaceholder();
+});
+
+const exerciseCombobox = setupCombobox(exerciseInput, document.getElementById("exercise-dropdown"), exerciseSuggestionSource, (name) => {
+  prefillFromProgram(name);
+  updateExerciseNoteHint();
+  updateWeightPlaceholder();
+});
 
 function closeExerciseDropdown() {
   exerciseCombobox.close();
@@ -637,6 +773,7 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
 
   if (editingLogId) {
     const entry = logs.find((l) => l.id === editingLogId);
+    if (exercise && exercise !== entry.exercise) renameExerciseEverywhere(entry.exercise, exercise);
     Object.assign(entry, {
       exercise, weight, sets, reps,
       workoutId: program ? program.id : null,
@@ -659,10 +796,8 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
   showEncouragement();
 
   const wasEditing = Boolean(editingLogId);
-  if (!wasEditing) {
-    if (previousBest > 0 && weight > previousBest) showToast(`🏆 Nouveau record : ${weight} lb !`);
-    const progEx = program?.exercises.find((pe) => pe.name === exercise);
-    if (progEx?.rest) startRestTimer(progEx.rest);
+  if (!wasEditing && previousBest > 0 && weight > previousBest) {
+    showToast(`🏆 Nouveau record : ${weight} lb !`);
   }
 
   resetLogForm();
@@ -670,12 +805,16 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
   if (!wasEditing) document.getElementById("program-select").value = programId;
   exerciseInput.focus();
   closeExerciseDropdown();
+  updateExerciseNoteHint();
+  updateWeightPlaceholder();
 });
 
 document.getElementById("log-cancel-btn").addEventListener("click", () => {
   resetLogForm();
   document.getElementById("log-form").reset();
   closeExerciseDropdown();
+  updateExerciseNoteHint();
+  updateWeightPlaceholder();
 });
 
 function editLogEntry(id) {
@@ -684,6 +823,8 @@ function editLogEntry(id) {
   editingLogId = entry.id;
   document.getElementById("program-select").value = entry.workoutId || "";
   exerciseInput.value = entry.exercise;
+  updateExerciseNoteHint();
+  updateWeightPlaceholder();
   document.getElementById("weight").value = entry.weight;
   document.getElementById("sets").value = entry.sets;
   document.getElementById("reps").value = entry.reps;
@@ -742,9 +883,11 @@ function renderDraftChips() {
         <span class="group-label">${ex.label}</span>
         <div class="draft-info">
           <strong>${ex.name}</strong>
-          <span>${[ex.sets && `${ex.sets} séries`, ex.reps && `${ex.reps} reps`, ex.rest && `${ex.rest}s repos`].filter(Boolean).join(" · ") || "—"}</span>
+          <span>${[ex.sets && `${ex.sets} séries`, ex.reps && `${ex.reps} reps`].filter(Boolean).join(" · ") || "—"}</span>
+          ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
         </div>
         <div class="draft-actions">
+          <button type="button" class="edit-draft" data-i="${i}">✎</button>
           <button type="button" class="move-up" data-i="${i}" ${i === 0 ? "disabled" : ""}>▲</button>
           <button type="button" class="move-down" data-i="${i}" ${i === draftExercises.length - 1 ? "disabled" : ""}>▼</button>
           <button type="button" class="remove-draft" data-i="${i}">✕</button>
@@ -811,33 +954,55 @@ newExerciseInput.addEventListener("keydown", (e) => {
   }
 });
 
+function cancelDraftExerciseEdit() {
+  editingDraftIndex = null;
+  document.getElementById("add-exercise-btn").textContent = "Ajouter à la liste";
+  document.getElementById("cancel-draft-edit-btn").classList.add("hidden");
+  newExerciseInput.value = "";
+  document.getElementById("new-exercise-sets").value = "";
+  document.getElementById("new-exercise-reps").value = "";
+}
+
+document.getElementById("cancel-draft-edit-btn").addEventListener("click", cancelDraftExerciseEdit);
+
 function addDraftExercise() {
   const name = newExerciseInput.value.trim();
   if (!name) return;
 
   const sets = document.getElementById("new-exercise-sets").value;
   const reps = document.getElementById("new-exercise-reps").value.trim();
-  const rest = document.getElementById("new-exercise-rest").value;
-  const superset = document.getElementById("new-exercise-superset").checked;
 
-  const lastGroup = draftExercises.length ? draftExercises[draftExercises.length - 1].group : -1;
-  const group = superset && draftExercises.length ? lastGroup : lastGroup + 1;
+  if (editingDraftIndex !== null) {
+    const original = draftExercises[editingDraftIndex];
+    if (name !== original.name) renameExerciseEverywhere(original.name, name);
+    draftExercises[editingDraftIndex] = {
+      ...original,
+      name,
+      sets: sets ? Number(sets) : null,
+      reps: reps || null,
+    };
+    cancelDraftExerciseEdit();
+  } else {
+    const superset = document.getElementById("new-exercise-superset").checked;
+    const lastGroup = draftExercises.length ? draftExercises[draftExercises.length - 1].group : -1;
+    const group = superset && draftExercises.length ? lastGroup : lastGroup + 1;
 
-  draftExercises.push({
-    name,
-    sets: sets ? Number(sets) : null,
-    reps: reps || null,
-    rest: rest ? Number(rest) : null,
-    group,
-  });
+    draftExercises.push({
+      name,
+      sets: sets ? Number(sets) : null,
+      reps: reps || null,
+      group,
+    });
+  }
 
   newExerciseInput.value = "";
   document.getElementById("new-exercise-sets").value = "";
   document.getElementById("new-exercise-reps").value = "";
-  document.getElementById("new-exercise-rest").value = "";
   document.getElementById("new-exercise-superset").checked = false;
   newExerciseInput.focus();
   renderDraftChips();
+  renderLog();
+  renderWorkouts();
 }
 
 document.getElementById("draft-exercise-list").addEventListener("click", (e) => {
@@ -845,7 +1010,20 @@ document.getElementById("draft-exercise-list").addEventListener("click", (e) => 
   if (!btn) return;
   const i = Number(btn.dataset.i);
 
+  if (btn.matches(".edit-draft")) {
+    editingDraftIndex = i;
+    const ex = draftExercises[i];
+    newExerciseInput.value = ex.name;
+    document.getElementById("new-exercise-sets").value = ex.sets || "";
+    document.getElementById("new-exercise-reps").value = ex.reps || "";
+    document.getElementById("add-exercise-btn").textContent = "Mettre à jour";
+    document.getElementById("cancel-draft-edit-btn").classList.remove("hidden");
+    newExerciseInput.focus();
+    return;
+  }
+
   if (btn.matches(".remove-draft")) {
+    if (editingDraftIndex === i) cancelDraftExerciseEdit();
     draftExercises.splice(i, 1);
   } else if (btn.matches(".move-up") && i > 0) {
     [draftExercises[i - 1], draftExercises[i]] = [draftExercises[i], draftExercises[i - 1]];
@@ -859,6 +1037,7 @@ function resetWorkoutForm() {
   editingWorkoutId = null;
   draftExercises = [];
   draftCover = null;
+  cancelDraftExerciseEdit();
   renderDraftChips();
   updateCoverPreview();
   document.getElementById("workout-form").reset();
@@ -897,7 +1076,7 @@ function renderWorkouts() {
   const container = document.getElementById("workout-list");
 
   if (workouts.length === 0) {
-    container.innerHTML = `<p class="empty-state">Aucun programme encore. Crée-en un ci-dessus.</p>`;
+    container.innerHTML = `<p class="empty-state">Aucun programme encore. Crée-en un ci-dessous.</p>`;
     return;
   }
 
@@ -912,8 +1091,13 @@ function renderWorkouts() {
         ${labelExerciseGroups(w.exercises).map((ex) => `
           <div class="workout-exercise-row ${ex.inSuperset ? "in-superset" : ""}">
             <span class="group-label">${ex.label}</span>
-            <span class="ex-name">${ex.name}</span>
-            <span class="ex-detail">${[ex.sets && `${ex.sets}x${ex.reps || "?"}`, ex.rest && `${ex.rest}s`].filter(Boolean).join(" · ")}</span>
+            <div class="workout-exercise-main">
+              <div class="workout-exercise-line">
+                <span class="ex-name">${ex.name}</span>
+                <span class="ex-detail">${ex.sets ? `${ex.sets}x${ex.reps || "?"}` : ""}</span>
+              </div>
+              ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
+            </div>
           </div>
         `).join("")}
         <button type="button" class="start-btn" data-id="${w.id}">▶ Démarrer la séance</button>
@@ -929,11 +1113,12 @@ function editWorkout(id) {
   document.getElementById("workout-name").value = w.name;
   draftExercises = w.exercises.map((ex) => ({ ...ex }));
   draftCover = w.cover || null;
+  cancelDraftExerciseEdit();
   renderDraftChips();
   updateCoverPreview();
   document.getElementById("workout-submit-btn").textContent = "Mettre à jour le programme";
   document.getElementById("workout-cancel-btn").classList.remove("hidden");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  document.getElementById("workout-form").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function deleteWorkout(id) {
@@ -1099,6 +1284,7 @@ function renderProgress() {
 let guidedSteps = [];
 let guidedIndex = 0;
 let guidedProgramName = "";
+let guidedDrafts = {};
 
 function startGuidedSession(programId) {
   const program = workouts.find((w) => w.id === programId);
@@ -1106,6 +1292,7 @@ function startGuidedSession(programId) {
   guidedSteps = labelExerciseGroups(program.exercises);
   guidedIndex = 0;
   guidedProgramName = program.name;
+  guidedDrafts = {};
 
   const coverImg = document.getElementById("guided-cover");
   if (program.cover) {
@@ -1147,32 +1334,46 @@ function renderGuidedStep() {
     `${guidedProgramName} — Exercice ${guidedIndex + 1} / ${guidedSteps.length}`;
   document.getElementById("guided-exercise-name").textContent = step.name;
   document.getElementById("guided-exercise-target").textContent =
-    [step.sets && `${step.sets} séries`, step.reps && `${step.reps} reps`, step.rest && `${step.rest}s repos`]
+    [step.sets && `${step.sets} séries`, step.reps && `${step.reps} reps`]
       .filter(Boolean).join(" · ") || "Pas de cible définie";
 
-  document.getElementById("guided-weight").value = "";
-  document.getElementById("guided-sets").value = step.sets || "";
+  document.getElementById("guided-back").disabled = guidedIndex === 0;
+
+  const draft = guidedDrafts[guidedIndex];
   const repsMatch = step.reps ? step.reps.match(/\d+/) : null;
-  document.getElementById("guided-reps").value = repsMatch ? repsMatch[0] : "";
+  document.getElementById("guided-weight").value = draft ? draft.weight : "";
+  document.getElementById("guided-sets").value = draft ? draft.sets : (step.sets || "");
+  document.getElementById("guided-reps").value = draft ? draft.reps : (repsMatch ? repsMatch[0] : "");
+
+  const lastEntry = logs
+    .filter((l) => l.exercise === step.name)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  document.getElementById("guided-weight").placeholder = lastEntry ? String(lastEntry.weight) : "";
+}
+
+function saveCurrentGuidedDraft() {
+  guidedDrafts[guidedIndex] = {
+    weight: document.getElementById("guided-weight").value,
+    sets: document.getElementById("guided-sets").value,
+    reps: document.getElementById("guided-reps").value,
+  };
 }
 
 function advanceGuidedStep() {
-  const step = guidedSteps[guidedIndex];
-  const nextStep = guidedSteps[guidedIndex + 1];
-  const isLastInGroup = !nextStep || nextStep.group !== step.group;
-
+  saveCurrentGuidedDraft();
   guidedIndex++;
+  renderGuidedStep();
+}
 
-  if (isLastInGroup && step.rest) {
-    startRestTimer(step.rest, renderGuidedStep);
-  } else {
-    renderGuidedStep();
-  }
+function goToPreviousGuidedStep() {
+  if (guidedIndex <= 0) return;
+  saveCurrentGuidedDraft();
+  guidedIndex--;
+  renderGuidedStep();
 }
 
 function closeGuidedSession() {
   document.getElementById("guided-overlay").classList.add("hidden");
-  stopRestTimer();
   renderLog();
 }
 
@@ -1203,6 +1404,7 @@ document.getElementById("guided-form").addEventListener("submit", (e) => {
 });
 
 document.getElementById("guided-skip").addEventListener("click", advanceGuidedStep);
+document.getElementById("guided-back").addEventListener("click", goToPreviousGuidedStep);
 
 document.getElementById("guided-quit").addEventListener("click", () => {
   if (confirm("Terminer la séance maintenant ?")) closeGuidedSession();

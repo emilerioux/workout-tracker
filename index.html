@@ -40,6 +40,7 @@
             <span class="combobox-arrow">▾</span>
             <div id="exercise-dropdown" class="combobox-dropdown"></div>
           </div>
+          <p id="exercise-note-hint" class="exercise-note-hint hidden"></p>
         </div>
 
         <div class="row row-stacked">
@@ -68,6 +69,8 @@
 
     <!-- ONGLET: PROGRAMMES -->
     <section id="view-workouts" class="view">
+      <div id="workout-list"></div>
+
       <form id="workout-form">
         <div class="field">
           <label for="workout-name">Nom du programme</label>
@@ -103,10 +106,6 @@
               <label for="new-exercise-reps">Reps</label>
               <input type="text" id="new-exercise-reps" placeholder="8-10">
             </div>
-            <div class="field">
-              <label for="new-exercise-rest">Repos (s)</label>
-              <input type="number" id="new-exercise-rest" min="0" step="5" placeholder="90">
-            </div>
           </div>
 
           <label class="checkbox-row hidden" id="superset-toggle-wrap">
@@ -114,7 +113,10 @@
             Superset avec l'exercice précédent
           </label>
 
-          <button type="button" id="add-exercise-btn" class="secondary-btn">Ajouter à la liste</button>
+          <div class="form-actions">
+            <button type="button" id="add-exercise-btn" class="secondary-btn">Ajouter à la liste</button>
+            <button type="button" id="cancel-draft-edit-btn" class="secondary-btn hidden">Annuler</button>
+          </div>
         </div>
 
         <div id="draft-exercise-list" class="draft-list"></div>
@@ -124,8 +126,6 @@
           <button type="button" id="workout-cancel-btn" class="secondary-btn hidden">Annuler</button>
         </div>
       </form>
-
-      <div id="workout-list"></div>
     </section>
 
     <!-- ONGLET: PROGRESSION -->
@@ -183,6 +183,12 @@
       </div>
 
       <div class="settings-card">
+        <h3>Exercices</h3>
+        <p class="settings-hint">Renomme un exercice (ça se met à jour partout : logs, programmes, progression) ou ajoute une note technique.</p>
+        <button type="button" id="manage-exercises-btn">Gérer mes exercices</button>
+      </div>
+
+      <div class="settings-card">
         <h3>Sauvegarde</h3>
         <p class="settings-hint">Tes données sont stockées seulement sur ce téléphone. Exporte-les de temps en temps pour ne rien perdre.</p>
         <button type="button" id="export-btn">Exporter mes données</button>
@@ -193,13 +199,13 @@
   </main>
 
   <nav id="bottom-nav">
-    <button class="nav-btn active" data-view="view-log">
-      <span class="nav-icon">📝</span>
-      <span>Log</span>
-    </button>
     <button class="nav-btn" data-view="view-workouts">
       <span class="nav-icon">📋</span>
       <span>Programmes</span>
+    </button>
+    <button class="nav-btn active" data-view="view-log">
+      <span class="nav-icon">📝</span>
+      <span>Log</span>
     </button>
     <button class="nav-btn" data-view="view-progress">
       <span class="nav-icon">📈</span>
@@ -245,10 +251,11 @@
           <button type="submit">Logger et continuer</button>
         </form>
 
-        <div class="guided-footer">
-          <button type="button" id="guided-skip" class="secondary-btn">Passer cet exercice</button>
-          <button type="button" id="guided-quit" class="secondary-btn">Terminer la séance</button>
+        <div class="guided-nav-row">
+          <button type="button" id="guided-back" class="secondary-btn">◀ Précédent</button>
+          <button type="button" id="guided-skip" class="secondary-btn">Passer ▶</button>
         </div>
+        <button type="button" id="guided-quit" class="secondary-btn guided-quit-btn">Terminer la séance</button>
       </div>
 
       <div id="guided-done" class="hidden">
@@ -256,6 +263,16 @@
         <p id="guided-done-summary"></p>
         <button type="button" id="guided-close">Retour</button>
       </div>
+    </div>
+  </div>
+
+  <div id="exercise-manager-overlay" class="cover-picker-overlay hidden">
+    <div class="cover-picker-card">
+      <div class="cover-picker-head">
+        <h3>Gérer mes exercices</h3>
+        <button type="button" id="exercise-manager-close">✕</button>
+      </div>
+      <div id="exercise-manager-list" class="exercise-manager-list"></div>
     </div>
   </div>
 
