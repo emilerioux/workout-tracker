@@ -4,6 +4,7 @@ const BODYWEIGHT_KEY = "bodyweight-logs";
 const THEME_KEY = "theme-preference";
 const EXERCISE_NOTES_KEY = "exercise-notes";
 const LAST_VIEW_KEY = "last-view";
+const ACCENT_HUE_KEY = "accent-hue";
 
 const ENCOURAGEMENTS = [
   "Chaque séance compte 💪",
@@ -95,11 +96,71 @@ function switchView(viewId) {
 
 switchView(sessionStorage.getItem(LAST_VIEW_KEY) || "view-workouts");
 
+/* ---------- Accent color ---------- */
+
+const ACCENT_COLORS = [
+  { name: "Rouge", hue: 355 },
+  { name: "Corail", hue: 12 },
+  { name: "Orange", hue: 28 },
+  { name: "Ambre", hue: 42 },
+  { name: "Jaune", hue: 55 },
+  { name: "Citron vert", hue: 78 },
+  { name: "Vert lime", hue: 95 },
+  { name: "Vert", hue: 130 },
+  { name: "Menthe", hue: 152 },
+  { name: "Émeraude", hue: 165 },
+  { name: "Turquoise", hue: 178 },
+  { name: "Cyan", hue: 190 },
+  { name: "Bleu ciel", hue: 200 },
+  { name: "Azur", hue: 215 },
+  { name: "Bleu", hue: 225 },
+  { name: "Indigo", hue: 240 },
+  { name: "Mauve", hue: 250 },
+  { name: "Violet", hue: 268 },
+  { name: "Améthyste", hue: 285 },
+  { name: "Rose", hue: 330 },
+];
+
+// (S%, L%) per token — tuned to match the app's original purple exactly;
+// applying any hue through this recipe keeps the same contrast/feel.
+const ACCENT_RECIPE = {
+  light: { primary: [74, 63], primaryDark: [65, 55], primaryLight: [62, 73], tint: [35, 93], hover: [80, 96] },
+  dark: { primary: [87, 72], primaryDark: [74, 63], primaryLight: [45, 48], tint: [24, 20], hover: [23, 23] },
+};
+
+function hslToHex(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function applyAccentHue(hue) {
+  const recipe = document.documentElement.getAttribute("data-theme") === "dark" ? ACCENT_RECIPE.dark : ACCENT_RECIPE.light;
+  const root = document.documentElement.style;
+  root.setProperty("--primary", hslToHex(hue, ...recipe.primary));
+  root.setProperty("--primary-dark", hslToHex(hue, ...recipe.primaryDark));
+  root.setProperty("--primary-light", hslToHex(hue, ...recipe.primaryLight));
+  root.setProperty("--tint", hslToHex(hue, ...recipe.tint));
+  root.setProperty("--hover", hslToHex(hue, ...recipe.hover));
+}
+
 /* ---------- Theme ---------- */
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   document.getElementById("dark-mode-toggle").checked = theme === "dark";
+  applyAccentHue(Number(localStorage.getItem(ACCENT_HUE_KEY)) || 250);
 }
 
 const storedTheme = localStorage.getItem(THEME_KEY);
@@ -110,6 +171,31 @@ document.getElementById("dark-mode-toggle").addEventListener("change", (e) => {
   const theme = e.target.checked ? "dark" : "light";
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(theme);
+});
+
+function renderAccentColorGrid() {
+  const current = Number(localStorage.getItem(ACCENT_HUE_KEY)) || 250;
+  document.getElementById("accent-color-grid").innerHTML = ACCENT_COLORS.map((c) => `
+    <button type="button" class="accent-color-swatch ${c.hue === current ? "active" : ""}" style="background: ${hslToHex(c.hue, 74, 55)}" data-hue="${c.hue}" title="${c.name}" aria-label="${c.name}"></button>
+  `).join("");
+}
+
+document.getElementById("accent-color-btn").addEventListener("click", () => {
+  renderAccentColorGrid();
+  document.getElementById("accent-color-overlay").classList.remove("hidden");
+});
+
+document.getElementById("accent-color-close").addEventListener("click", () => {
+  document.getElementById("accent-color-overlay").classList.add("hidden");
+});
+
+document.getElementById("accent-color-grid").addEventListener("click", (e) => {
+  const btn = e.target.closest(".accent-color-swatch");
+  if (!btn) return;
+  const hue = Number(btn.dataset.hue);
+  localStorage.setItem(ACCENT_HUE_KEY, hue);
+  applyAccentHue(hue);
+  document.getElementById("accent-color-overlay").classList.add("hidden");
 });
 
 /* ---------- Exercise registry (rename + notes) ---------- */

@@ -114,7 +114,7 @@
           </label>
 
           <div class="form-actions">
-            <button type="button" id="add-exercise-btn" class="secondary-btn">Ajouter à la liste</button>
+            <button type="button" id="add-exercise-btn">Ajouter à la liste</button>
             <button type="button" id="cancel-draft-edit-btn" class="secondary-btn hidden">Annuler</button>
           </div>
         </div>
@@ -180,6 +180,8 @@
           <input type="checkbox" id="dark-mode-toggle">
           <span class="switch"></span>
         </label>
+        <p class="settings-hint accent-hint">Couleur de l'application</p>
+        <button type="button" id="accent-color-btn" class="secondary-btn">🎨 Choisir une couleur</button>
       </div>
 
       <div class="settings-card">
@@ -221,6 +223,16 @@
     <button type="button" id="action-menu-note">📝 Note</button>
     <button type="button" id="action-menu-edit">✎ Modifier</button>
     <button type="button" id="action-menu-delete">✕ Supprimer</button>
+  </div>
+
+  <div id="accent-color-overlay" class="cover-picker-overlay hidden">
+    <div class="cover-picker-card">
+      <div class="cover-picker-head">
+        <h3>Choisir une couleur</h3>
+        <button type="button" id="accent-color-close">✕</button>
+      </div>
+      <div id="accent-color-grid" class="accent-color-grid"></div>
+    </div>
   </div>
 
   <div id="note-exercise-picker-overlay" class="cover-picker-overlay hidden">
