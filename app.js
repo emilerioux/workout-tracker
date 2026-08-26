@@ -565,6 +565,9 @@ let actionMenuContext = null;
 function openActionMenu(btn, type, id) {
   actionMenuContext = { type, id };
   const menu = document.getElementById("action-menu");
+  document.getElementById("action-menu-note").classList.toggle("hidden", type === "workout");
+  document.getElementById("action-menu-edit").classList.toggle("hidden", type === "exercise");
+  document.getElementById("action-menu-delete").classList.toggle("hidden", type === "exercise");
   const rect = btn.getBoundingClientRect();
   menu.style.top = `${rect.bottom + 4}px`;
   menu.style.right = `${window.innerWidth - rect.right}px`;
@@ -576,6 +579,14 @@ function closeActionMenu() {
   document.getElementById("action-menu").classList.add("hidden");
   actionMenuContext = null;
 }
+
+document.getElementById("action-menu-note").addEventListener("click", () => {
+  const ctx = actionMenuContext;
+  closeActionMenu();
+  if (!ctx) return;
+  const name = ctx.type === "log" ? logs.find((l) => l.id === ctx.id)?.exercise : ctx.id;
+  if (name) openNoteEditor(name);
+});
 
 document.getElementById("action-menu-edit").addEventListener("click", () => {
   const ctx = actionMenuContext;
@@ -595,6 +606,35 @@ document.getElementById("action-menu-delete").addEventListener("click", () => {
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".menu-btn") && !e.target.closest("#action-menu")) closeActionMenu();
+});
+
+/* ---------- Note editor (per exercise, opened from ⋯ menu) ---------- */
+
+let noteEditorExercise = null;
+
+function openNoteEditor(exerciseName) {
+  noteEditorExercise = exerciseName;
+  document.getElementById("note-editor-title").textContent = `Note — ${exerciseName}`;
+  document.getElementById("note-editor-input").value = exerciseNotes[exerciseName] || "";
+  document.getElementById("note-editor-overlay").classList.remove("hidden");
+}
+
+function closeNoteEditor() {
+  document.getElementById("note-editor-overlay").classList.add("hidden");
+  noteEditorExercise = null;
+}
+
+document.getElementById("note-editor-close").addEventListener("click", closeNoteEditor);
+document.getElementById("note-editor-cancel").addEventListener("click", closeNoteEditor);
+
+document.getElementById("note-editor-save").addEventListener("click", () => {
+  const note = document.getElementById("note-editor-input").value.trim();
+  if (note) exerciseNotes[noteEditorExercise] = note;
+  else delete exerciseNotes[noteEditorExercise];
+  saveExerciseNotes();
+  closeNoteEditor();
+  renderWorkouts();
+  updateExerciseNoteHint();
 });
 
 /* ---------- Encouragement ---------- */
@@ -1098,6 +1138,7 @@ function renderWorkouts() {
               </div>
               ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
             </div>
+            <button class="menu-btn" data-name="${ex.name}">⋯</button>
           </div>
         `).join("")}
         <button type="button" class="start-btn" data-id="${w.id}">▶ Démarrer la séance</button>
@@ -1137,7 +1178,9 @@ document.getElementById("workout-list").addEventListener("click", (e) => {
   }
 
   const btn = e.target.closest(".menu-btn");
-  if (btn) openActionMenu(btn, "workout", btn.dataset.id);
+  if (!btn) return;
+  if (btn.dataset.name) openActionMenu(btn, "exercise", btn.dataset.name);
+  else openActionMenu(btn, "workout", btn.dataset.id);
 });
 
 /* ---------- Progress view ---------- */

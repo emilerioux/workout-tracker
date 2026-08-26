@@ -218,8 +218,23 @@
   </nav>
 
   <div id="action-menu" class="action-menu hidden">
+    <button type="button" id="action-menu-note">📝 Note</button>
     <button type="button" id="action-menu-edit">✎ Modifier</button>
     <button type="button" id="action-menu-delete">✕ Supprimer</button>
+  </div>
+
+  <div id="note-editor-overlay" class="cover-picker-overlay hidden">
+    <div class="cover-picker-card">
+      <div class="cover-picker-head">
+        <h3 id="note-editor-title">Note</h3>
+        <button type="button" id="note-editor-close">✕</button>
+      </div>
+      <textarea id="note-editor-input" class="note-editor-textarea" rows="3" placeholder="Note (ex: grip large, attention à l'épaule)"></textarea>
+      <div class="form-actions">
+        <button type="button" id="note-editor-save">Enregistrer</button>
+        <button type="button" id="note-editor-cancel" class="secondary-btn">Annuler</button>
+      </div>
+    </div>
   </div>
 
   <div id="guided-overlay" class="guided-overlay hidden">

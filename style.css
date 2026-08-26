@@ -1000,6 +1000,13 @@ button:disabled {
   resize: vertical;
 }
 
+.note-editor-textarea {
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 14px;
+}
+
 /* Compact per-exercise note shown in log/program lists */
 
 .ex-note {
@@ -1130,4 +1137,15 @@ button:disabled {
 
 .nav-icon {
   font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: background-color 0.2s ease;
+}
+
+.nav-btn.active .nav-icon {
+  background: var(--tint);
 }
