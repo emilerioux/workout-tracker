@@ -960,6 +960,14 @@ button:disabled {
   padding: 10px 12px;
 }
 
+.note-pick-row {
+  cursor: pointer;
+}
+
+.note-pick-row:active {
+  background: var(--hover);
+}
+
 .exercise-manager-row.editing {
   flex-direction: column;
   align-items: stretch;

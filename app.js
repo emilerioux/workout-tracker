@@ -569,9 +569,6 @@ let actionMenuContext = null;
 function openActionMenu(btn, type, id) {
   actionMenuContext = { type, id };
   const menu = document.getElementById("action-menu");
-  document.getElementById("action-menu-note").classList.toggle("hidden", type === "workout");
-  document.getElementById("action-menu-edit").classList.toggle("hidden", type === "exercise");
-  document.getElementById("action-menu-delete").classList.toggle("hidden", type === "exercise");
   const rect = btn.getBoundingClientRect();
   menu.style.top = `${rect.bottom + 4}px`;
   menu.style.right = `${window.innerWidth - rect.right}px`;
@@ -588,8 +585,12 @@ document.getElementById("action-menu-note").addEventListener("click", () => {
   const ctx = actionMenuContext;
   closeActionMenu();
   if (!ctx) return;
-  const name = ctx.type === "log" ? logs.find((l) => l.id === ctx.id)?.exercise : ctx.id;
-  if (name) openNoteEditor(name);
+  if (ctx.type === "log") {
+    const name = logs.find((l) => l.id === ctx.id)?.exercise;
+    if (name) openNoteEditor(name);
+  } else {
+    openNoteExercisePicker(ctx.id);
+  }
 });
 
 document.getElementById("action-menu-edit").addEventListener("click", () => {
@@ -639,6 +640,38 @@ document.getElementById("note-editor-save").addEventListener("click", () => {
   closeNoteEditor();
   renderWorkouts();
   updateExerciseNoteHint();
+});
+
+/* ---------- Note exercise picker (choose which exercise to annotate) ---------- */
+
+function openNoteExercisePicker(workoutId) {
+  const w = workouts.find((w) => w.id === workoutId);
+  if (!w) return;
+  document.getElementById("note-exercise-picker-list").innerHTML = w.exercises
+    .map((ex) => `
+      <div class="exercise-manager-row note-pick-row" data-name="${ex.name}">
+        <div class="exercise-manager-info">
+          <strong>${ex.name}</strong>
+          ${exerciseNotes[ex.name] ? `<span class="exercise-manager-note">📝 ${exerciseNotes[ex.name]}</span>` : ""}
+        </div>
+        <span class="edit-btn">📝</span>
+      </div>
+    `)
+    .join("");
+  document.getElementById("note-exercise-picker-overlay").classList.remove("hidden");
+}
+
+function closeNoteExercisePicker() {
+  document.getElementById("note-exercise-picker-overlay").classList.add("hidden");
+}
+
+document.getElementById("note-exercise-picker-close").addEventListener("click", closeNoteExercisePicker);
+
+document.getElementById("note-exercise-picker-list").addEventListener("click", (e) => {
+  const row = e.target.closest(".note-pick-row");
+  if (!row) return;
+  closeNoteExercisePicker();
+  openNoteEditor(row.dataset.name);
 });
 
 /* ---------- Encouragement ---------- */
@@ -1142,7 +1175,6 @@ function renderWorkouts() {
               </div>
               ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
             </div>
-            <button class="menu-btn" data-name="${ex.name}">⋯</button>
           </div>
         `).join("")}
         <button type="button" class="start-btn" data-id="${w.id}">▶ Démarrer la séance</button>
@@ -1182,9 +1214,7 @@ document.getElementById("workout-list").addEventListener("click", (e) => {
   }
 
   const btn = e.target.closest(".menu-btn");
-  if (!btn) return;
-  if (btn.dataset.name) openActionMenu(btn, "exercise", btn.dataset.name);
-  else openActionMenu(btn, "workout", btn.dataset.id);
+  if (btn) openActionMenu(btn, "workout", btn.dataset.id);
 });
 
 /* ---------- Progress view ---------- */
