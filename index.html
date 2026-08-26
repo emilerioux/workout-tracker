@@ -24,7 +24,7 @@
 
   <main>
     <!-- ONGLET: LOG -->
-    <section id="view-log" class="view active">
+    <section id="view-log" class="view">
       <form id="log-form">
         <div class="field">
           <label for="program-select">Programme</label>
@@ -68,7 +68,7 @@
     </section>
 
     <!-- ONGLET: PROGRAMMES -->
-    <section id="view-workouts" class="view">
+    <section id="view-workouts" class="view active">
       <div id="workout-list"></div>
 
       <form id="workout-form">
@@ -199,11 +199,11 @@
   </main>
 
   <nav id="bottom-nav">
-    <button class="nav-btn" data-view="view-workouts">
+    <button class="nav-btn active" data-view="view-workouts">
       <span class="nav-icon">📋</span>
       <span>Programmes</span>
     </button>
-    <button class="nav-btn active" data-view="view-log">
+    <button class="nav-btn" data-view="view-log">
       <span class="nav-icon">📝</span>
       <span>Log</span>
     </button>

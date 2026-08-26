@@ -3,6 +3,7 @@ const WORKOUTS_KEY = "workout-templates";
 const BODYWEIGHT_KEY = "bodyweight-logs";
 const THEME_KEY = "theme-preference";
 const EXERCISE_NOTES_KEY = "exercise-notes";
+const LAST_VIEW_KEY = "last-view";
 
 const ENCOURAGEMENTS = [
   "Chaque séance compte 💪",
@@ -83,6 +84,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 function switchView(viewId) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === viewId));
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === viewId));
+  sessionStorage.setItem(LAST_VIEW_KEY, viewId);
   if (viewId === "view-progress") {
     renderProgress();
     if (!document.getElementById("progress-photo-mode").classList.contains("hidden")) renderPhotoGallery();
@@ -90,6 +92,8 @@ function switchView(viewId) {
   }
   if (viewId === "view-workouts") renderWorkouts();
 }
+
+switchView(sessionStorage.getItem(LAST_VIEW_KEY) || "view-workouts");
 
 /* ---------- Theme ---------- */
 
