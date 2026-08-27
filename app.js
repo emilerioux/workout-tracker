@@ -6,6 +6,30 @@ const EXERCISE_NOTES_KEY = "exercise-notes";
 const LAST_VIEW_KEY = "last-view";
 const ACCENT_HUE_KEY = "accent-hue";
 
+/* ---------- Helpers ---------- */
+
+const $ = (id) => document.getElementById(id);
+
+// Escape user-provided text before it goes into innerHTML / attributes.
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+// localStorage-backed JSON store: storage(key).load(fallback) / .save(value)
+function storage(key) {
+  return {
+    load(fallback) {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    },
+    save(value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    },
+  };
+}
+
 const ENCOURAGEMENTS = [
   "Chaque séance compte 💪",
   "Un peu plus fort qu'hier",
@@ -19,46 +43,20 @@ const ENCOURAGEMENTS = [
   "Petit progrès > pas de progrès",
 ];
 
-function loadLogs() {
-  const raw = localStorage.getItem(LOGS_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
+const logsStore = storage(LOGS_KEY);
+const workoutsStore = storage(WORKOUTS_KEY);
+const bodyweightsStore = storage(BODYWEIGHT_KEY);
+const exerciseNotesStore = storage(EXERCISE_NOTES_KEY);
 
-function saveLogs() {
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
-}
+const saveLogs = () => logsStore.save(logs);
+const saveWorkouts = () => workoutsStore.save(workouts);
+const saveBodyweights = () => bodyweightsStore.save(bodyweights);
+const saveExerciseNotes = () => exerciseNotesStore.save(exerciseNotes);
 
-function loadWorkouts() {
-  const raw = localStorage.getItem(WORKOUTS_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-
-function saveWorkouts() {
-  localStorage.setItem(WORKOUTS_KEY, JSON.stringify(workouts));
-}
-
-function loadBodyweights() {
-  const raw = localStorage.getItem(BODYWEIGHT_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-
-function saveBodyweights() {
-  localStorage.setItem(BODYWEIGHT_KEY, JSON.stringify(bodyweights));
-}
-
-function loadExerciseNotes() {
-  const raw = localStorage.getItem(EXERCISE_NOTES_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
-function saveExerciseNotes() {
-  localStorage.setItem(EXERCISE_NOTES_KEY, JSON.stringify(exerciseNotes));
-}
-
-let logs = loadLogs();
-let workouts = loadWorkouts();
-let bodyweights = loadBodyweights();
-let exerciseNotes = loadExerciseNotes();
+let logs = logsStore.load([]);
+let workouts = workoutsStore.load([]);
+let bodyweights = bodyweightsStore.load([]);
+let exerciseNotes = exerciseNotesStore.load({});
 let editingExerciseName = null;
 let draftExercises = [];
 let draftCover = null;
@@ -146,20 +144,25 @@ function hslToHex(h, s, l) {
 }
 
 function applyAccentHue(hue) {
-  const recipe = document.documentElement.getAttribute("data-theme") === "dark" ? ACCENT_RECIPE.dark : ACCENT_RECIPE.light;
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  const recipe = dark ? ACCENT_RECIPE.dark : ACCENT_RECIPE.light;
   const root = document.documentElement.style;
-  root.setProperty("--primary", hslToHex(hue, ...recipe.primary));
+  const primary = hslToHex(hue, ...recipe.primary);
+  root.setProperty("--primary", primary);
   root.setProperty("--primary-dark", hslToHex(hue, ...recipe.primaryDark));
   root.setProperty("--primary-light", hslToHex(hue, ...recipe.primaryLight));
   root.setProperty("--tint", hslToHex(hue, ...recipe.tint));
   root.setProperty("--hover", hslToHex(hue, ...recipe.hover));
+  // Keep the iOS status bar / PWA chrome in sync with the current theme + accent.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#15141c" : primary);
 }
 
 /* ---------- Theme ---------- */
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  document.getElementById("dark-mode-toggle").checked = theme === "dark";
+  $("dark-mode-toggle").checked = theme === "dark";
   applyAccentHue(Number(localStorage.getItem(ACCENT_HUE_KEY)) || 250);
 }
 
@@ -229,8 +232,8 @@ function renderExerciseManager() {
     if (name === editingExerciseName) {
       return `
         <div class="exercise-manager-row editing">
-          <input type="text" id="exercise-manager-name-input" value="${name}">
-          <textarea id="exercise-manager-note-input" placeholder="Note (ex: grip large, attention à l'épaule)" rows="2">${exerciseNotes[name] || ""}</textarea>
+          <input type="text" id="exercise-manager-name-input" value="${esc(name)}">
+          <textarea id="exercise-manager-note-input" placeholder="Note (ex: grip large, attention à l'épaule)" rows="2">${esc(exerciseNotes[name] || "")}</textarea>
           <div class="form-actions">
             <button type="button" id="exercise-manager-save">Enregistrer</button>
             <button type="button" id="exercise-manager-cancel" class="secondary-btn">Annuler</button>
@@ -242,10 +245,10 @@ function renderExerciseManager() {
     return `
       <div class="exercise-manager-row">
         <div class="exercise-manager-info">
-          <strong>${name}</strong>
-          ${note ? `<span class="exercise-manager-note">📝 ${note}</span>` : ""}
+          <strong>${esc(name)}</strong>
+          ${note ? `<span class="exercise-manager-note">📝 ${esc(note)}</span>` : ""}
         </div>
-        <button type="button" class="edit-btn" data-name="${name}">✎</button>
+        <button type="button" class="edit-btn" data-name="${esc(name)}">✎</button>
       </div>
     `;
   }).join("");
@@ -592,62 +595,6 @@ document.getElementById("photo-lightbox-close").addEventListener("click", () => 
   document.getElementById("photo-lightbox").classList.add("hidden");
 });
 
-/* ---------- Rest timer ---------- */
-
-let restTimerInterval = null;
-
-function beep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-    osc.onended = () => ctx.close();
-  } catch {}
-}
-
-function formatTimer(sec) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function startRestTimer(seconds, onDone) {
-  clearInterval(restTimerInterval);
-  const bar = document.getElementById("rest-timer");
-  const label = document.getElementById("rest-timer-label");
-  let remaining = seconds;
-
-  bar.classList.remove("hidden");
-  label.textContent = `Repos : ${formatTimer(remaining)}`;
-
-  restTimerInterval = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(restTimerInterval);
-      label.textContent = "Repos terminé 💪";
-      if (navigator.vibrate) navigator.vibrate(300);
-      beep();
-      setTimeout(() => bar.classList.add("hidden"), 2500);
-      if (onDone) onDone();
-    } else {
-      label.textContent = `Repos : ${formatTimer(remaining)}`;
-    }
-  }, 1000);
-}
-
-function stopRestTimer() {
-  clearInterval(restTimerInterval);
-  document.getElementById("rest-timer").classList.add("hidden");
-}
-
-document.getElementById("rest-timer-skip").addEventListener("click", stopRestTimer);
-
 /* ---------- Action menu (⋯) ---------- */
 
 let actionMenuContext = null;
@@ -735,10 +682,10 @@ function openNoteExercisePicker(workoutId) {
   if (!w) return;
   document.getElementById("note-exercise-picker-list").innerHTML = w.exercises
     .map((ex) => `
-      <div class="exercise-manager-row note-pick-row" data-name="${ex.name}">
+      <div class="exercise-manager-row note-pick-row" data-name="${esc(ex.name)}">
         <div class="exercise-manager-info">
-          <strong>${ex.name}</strong>
-          ${exerciseNotes[ex.name] ? `<span class="exercise-manager-note">📝 ${exerciseNotes[ex.name]}</span>` : ""}
+          <strong>${esc(ex.name)}</strong>
+          ${exerciseNotes[ex.name] ? `<span class="exercise-manager-note">📝 ${esc(exerciseNotes[ex.name])}</span>` : ""}
         </div>
         <span class="edit-btn">📝</span>
       </div>
@@ -779,7 +726,7 @@ function populateProgramSelect() {
   const select = document.getElementById("program-select");
   const current = select.value;
   select.innerHTML = `<option value="">Libre (tous les exercices)</option>` +
-    workouts.map((w) => `<option value="${w.id}">${w.name}</option>`).join("");
+    workouts.map((w) => `<option value="${w.id}">${esc(w.name)}</option>`).join("");
   if (workouts.some((w) => w.id === current)) select.value = current;
 }
 
@@ -790,7 +737,7 @@ function setupCombobox(input, dropdown, sourceFn, onSelect) {
     const matches = q ? names.filter((n) => n.toLowerCase().includes(q)) : names;
 
     dropdown.innerHTML = matches.length
-      ? matches.map((n) => `<div class="combobox-option" data-name="${n}">${n}</div>`).join("")
+      ? matches.map((n) => `<div class="combobox-option" data-name="${esc(n)}">${esc(n)}</div>`).join("")
       : `<div class="combobox-empty">Aucun exercice existant — tape pour en créer un nouveau</div>`;
 
     dropdown.classList.add("open");
@@ -905,9 +852,9 @@ function renderLog() {
         ${entries.map((entry) => `
           <div class="log-entry">
             <div class="info">
-              <strong>${entry.exercise}</strong>
+              <strong>${esc(entry.exercise)}</strong>
               <span>${entry.weight} lb × ${entry.sets} séries × ${entry.reps} reps</span>
-              ${entry.workoutName ? `<span class="tag">${entry.workoutName}</span>` : ""}
+              ${entry.workoutName ? `<span class="tag">${esc(entry.workoutName)}</span>` : ""}
             </div>
             <button class="menu-btn" data-id="${entry.id}">⋯</button>
           </div>
@@ -1011,9 +958,25 @@ document.getElementById("log-list").addEventListener("click", (e) => {
 
 /* ---------- Workouts (programmes) view ---------- */
 
+// Rebuilds `group` ids purely from array order: an entry keeps its predecessor's
+// group only if they already shared a group id. Reordering that pulls a superset
+// member away from its partner therefore dissolves the pair instead of leaving
+// two non-adjacent entries wearing the same id (which broke the A/B labelling).
+function normalizeGroups(exercises) {
+  const original = exercises.map((ex) => ex.group);
+  let current = 0;
+  exercises.forEach((ex, i) => {
+    if (i > 0 && original[i] !== original[i - 1]) current++;
+    ex.group = current;
+  });
+  return exercises;
+}
+
 // Assigns display labels (A, A1/A2 for supersets, B, C...) based on
-// consecutive entries sharing the same `group` id.
+// consecutive entries sharing the same `group` id. Works on normalized copies so
+// callers' objects are untouched and stale data still labels correctly.
 function labelExerciseGroups(exercises) {
+  exercises = normalizeGroups(exercises.map((ex) => ({ ...ex })));
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let letterIndex = -1;
   let lastGroup = null;
@@ -1045,9 +1008,9 @@ function renderDraftChips() {
       <div class="draft-card ${ex.inSuperset ? "in-superset" : ""}">
         <span class="group-label">${ex.label}</span>
         <div class="draft-info">
-          <strong>${ex.name}</strong>
-          <span>${[ex.sets && `${ex.sets} séries`, ex.reps && `${ex.reps} reps`].filter(Boolean).join(" · ") || "—"}</span>
-          ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
+          <strong>${esc(ex.name)}</strong>
+          <span>${[ex.sets && `${ex.sets} séries`, ex.reps && `${esc(ex.reps)} reps`].filter(Boolean).join(" · ") || "—"}</span>
+          ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${esc(exerciseNotes[ex.name])}">📝 ${esc(exerciseNotes[ex.name])}</span>` : ""}
         </div>
         <div class="draft-actions">
           <button type="button" class="edit-draft" data-i="${i}">✎</button>
@@ -1213,6 +1176,8 @@ document.getElementById("workout-form").addEventListener("submit", (e) => {
   const name = document.getElementById("workout-name").value.trim();
   if (!name || draftExercises.length === 0) return;
 
+  normalizeGroups(draftExercises);
+
   if (editingWorkoutId) {
     const w = workouts.find((w) => w.id === editingWorkoutId);
     w.name = name;
@@ -1246,9 +1211,9 @@ function renderWorkouts() {
   container.innerHTML = workouts
     .map((w) => `
       <div class="workout-card">
-        ${w.cover ? `<img src="${w.cover}" class="workout-cover" alt="${w.name}">` : ""}
+        ${w.cover ? `<img src="${w.cover}" class="workout-cover" alt="${esc(w.name)}">` : ""}
         <div class="workout-card-head">
-          <h3>${w.name}</h3>
+          <h3>${esc(w.name)}</h3>
           <button class="menu-btn" data-id="${w.id}">⋯</button>
         </div>
         ${labelExerciseGroups(w.exercises).map((ex) => `
@@ -1256,10 +1221,10 @@ function renderWorkouts() {
             <span class="group-label">${ex.label}</span>
             <div class="workout-exercise-main">
               <div class="workout-exercise-line">
-                <span class="ex-name">${ex.name}</span>
-                <span class="ex-detail">${ex.sets ? `${ex.sets}x${ex.reps || "?"}` : ""}</span>
+                <span class="ex-name">${esc(ex.name)}</span>
+                <span class="ex-detail">${ex.sets ? `${ex.sets}x${esc(ex.reps || "?")}` : ""}</span>
               </div>
-              ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${exerciseNotes[ex.name]}">📝 ${exerciseNotes[ex.name]}</span>` : ""}
+              ${exerciseNotes[ex.name] ? `<span class="ex-note" title="${esc(exerciseNotes[ex.name])}">📝 ${esc(exerciseNotes[ex.name])}</span>` : ""}
             </div>
           </div>
         `).join("")}
@@ -1305,12 +1270,23 @@ document.getElementById("workout-list").addEventListener("click", (e) => {
 
 /* ---------- Progress view ---------- */
 
+function mostRecentlyLoggedExercise() {
+  return [...logs].sort((a, b) => b.createdAt - a.createdAt)[0]?.exercise ?? null;
+}
+
 function populateProgressSelect() {
   const select = document.getElementById("progress-exercise-select");
   const current = select.value;
   const names = allExerciseNames();
-  select.innerHTML = names.map((n) => `<option value="${n}">${n}</option>`).join("");
-  if (names.includes(current)) select.value = current;
+  select.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  if (names.includes(current)) {
+    select.value = current;
+  } else {
+    // First open (or the selected exercise vanished): show the one with data,
+    // not just the alphabetical first — which is often an exercise never logged.
+    const fallback = mostRecentlyLoggedExercise();
+    if (fallback && names.includes(fallback)) select.value = fallback;
+  }
 }
 
 document.getElementById("progress-exercise-select").addEventListener("change", renderProgress);
@@ -1446,6 +1422,7 @@ function renderProgress() {
 
 let guidedSteps = [];
 let guidedIndex = 0;
+let guidedProgramId = null;
 let guidedProgramName = "";
 let guidedDrafts = {};
 
@@ -1454,6 +1431,7 @@ function startGuidedSession(programId) {
   if (!program) return;
   guidedSteps = labelExerciseGroups(program.exercises);
   guidedIndex = 0;
+  guidedProgramId = program.id;
   guidedProgramName = program.name;
   guidedDrafts = {};
 
@@ -1543,7 +1521,7 @@ function closeGuidedSession() {
 document.getElementById("guided-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const step = guidedSteps[guidedIndex];
-  const program = workouts.find((w) => w.name === guidedProgramName);
+  const program = workouts.find((w) => w.id === guidedProgramId);
   const now = new Date();
   const weight = Number(document.getElementById("guided-weight").value);
   const previousBest = Math.max(0, ...logs.filter((l) => l.exercise === step.name).map((l) => l.weight));
