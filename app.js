@@ -1488,19 +1488,6 @@ function computeTrend(points, days) {
   return { dir: delta > 0 ? "up" : "down", delta: Math.abs(delta) };
 }
 
-// Tiny axis-less sparkline for the exercise chips.
-function miniSpark(vals) {
-  if (vals.length < 2) return "";
-  const w = 38, h = 13;
-  let mn = Math.min(...vals), mx = Math.max(...vals);
-  if (mn === mx) { mn -= 1; mx += 1; }
-  const pts = vals.map((v, i) => [
-    (i / (vals.length - 1)) * w,
-    h - ((v - mn) / (mx - mn)) * h,
-  ]);
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path class="spark" d="${smoothPath(pts)}"/></svg>`;
-}
-
 function buildLineChartSVG(points, unit, opts = {}) {
   const W = 300, H = 172;
   const pad = { l: 12, r: 16, t: 30, b: 22 };
@@ -1629,37 +1616,8 @@ function wireChartCrosshair(container, points, formatTip) {
   hit.addEventListener("pointerup", end);
 }
 
-function renderExerciseChips() {
-  const box = document.getElementById("progress-exercise-chips");
-  if (!box) return;
-  const current = document.getElementById("progress-exercise-select").value;
-  const names = allExerciseNames();
-  box.innerHTML = names.map((n) => {
-    const series = logs
-      .filter((l) => l.exercise === n)
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .map((l) => l.weight);
-    return `<button type="button" class="ex-chip ${n === current ? "on" : ""}" data-name="${esc(n)}">${esc(n)}${miniSpark(series)}</button>`;
-  }).join("");
-
-  const on = box.querySelector(".ex-chip.on");
-  if (on) {
-    const rel = on.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft;
-    box.scrollLeft = rel - box.clientWidth / 2 + on.clientWidth / 2;
-  }
-}
-
-document.getElementById("progress-exercise-chips").addEventListener("click", (e) => {
-  const chip = e.target.closest(".ex-chip");
-  if (!chip) return;
-  const select = document.getElementById("progress-exercise-select");
-  select.value = chip.dataset.name;
-  select.dispatchEvent(new Event("change"));
-});
-
 function renderProgress() {
   populateProgressSelect();
-  renderExerciseChips();
 
   const select = document.getElementById("progress-exercise-select");
   const statsBox = document.getElementById("progress-stats");

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Mes Workouts</title>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <meta name="theme-color" content="#6c5ce7">
@@ -150,9 +150,10 @@
       </div>
 
       <div id="progress-chart-mode">
-        <div id="progress-exercise-chips" class="ex-chips"></div>
-        <label for="progress-exercise-select" class="visually-hidden">Exercice</label>
-        <select id="progress-exercise-select" class="visually-hidden"></select>
+        <div class="ex-picker">
+          <label for="progress-exercise-select" class="visually-hidden">Exercice</label>
+          <select id="progress-exercise-select"></select>
+        </div>
 
         <div class="segmented" id="metric-toggle">
           <button type="button" data-metric="weight" class="active">Poids</button>
@@ -364,6 +365,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

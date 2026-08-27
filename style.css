@@ -957,7 +957,7 @@ button:disabled {
 .chart-trend.up { color: var(--up); background: var(--tint-accent); }
 .chart-trend.down { color: var(--down); background: var(--gold-weak); }
 
-/* Exercise chips (Progression) */
+/* Exercise picker (Progression) */
 
 .visually-hidden {
   position: absolute;
@@ -971,39 +971,35 @@ button:disabled {
   border: 0;
 }
 
-.ex-chips {
-  display: flex;
-  gap: 7px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+.ex-picker {
+  text-align: center;
   margin-bottom: 14px;
-  scrollbar-width: none;
 }
-.ex-chips::-webkit-scrollbar { display: none; }
 
-.ex-chip {
+.ex-picker select {
   width: auto;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 12px 42px 12px 22px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 6px 11px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--card);
-  white-space: nowrap;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239b96a8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: center;
+  text-align-last: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-.ex-chip.on {
-  background: var(--tint);
-  border-color: transparent;
-  color: var(--primary);
-  font-weight: 600;
+
+.ex-picker select:focus-visible {
+  border-color: var(--primary);
 }
-.ex-chip svg { display: block; flex-shrink: 0; }
-.ex-chip .spark { stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; }
 
 /* Guided session */
 
