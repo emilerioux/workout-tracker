@@ -99,26 +99,19 @@ switchView(sessionStorage.getItem(LAST_VIEW_KEY) || "view-workouts");
 /* ---------- Accent color ---------- */
 
 const ACCENT_COLORS = [
-  { name: "Rouge", hue: 355 },
-  { name: "Corail", hue: 12 },
-  { name: "Orange", hue: 28 },
-  { name: "Ambre", hue: 42 },
-  { name: "Jaune", hue: 55 },
-  { name: "Citron vert", hue: 78 },
-  { name: "Vert lime", hue: 95 },
-  { name: "Vert", hue: 130 },
-  { name: "Menthe", hue: 152 },
-  { name: "Émeraude", hue: 165 },
-  { name: "Turquoise", hue: 178 },
-  { name: "Cyan", hue: 190 },
-  { name: "Bleu ciel", hue: 200 },
-  { name: "Azur", hue: 215 },
+  { name: "Corail", hue: 8 },
+  { name: "Orange", hue: 22 },
+  { name: "Ambre", hue: 40 },
+  { name: "Vert", hue: 142 },
+  { name: "Émeraude", hue: 160 },
+  { name: "Menthe", hue: 168 },
+  { name: "Sarcelle", hue: 182 },
   { name: "Bleu", hue: 225 },
   { name: "Indigo", hue: 240 },
-  { name: "Mauve", hue: 250 },
-  { name: "Violet", hue: 268 },
-  { name: "Améthyste", hue: 285 },
-  { name: "Rose", hue: 330 },
+  { name: "Violet", hue: 250 },
+  { name: "Améthyste", hue: 282 },
+  { name: "Rose", hue: 332 },
+  { name: "Rouge", hue: 352 },
 ];
 
 // (S%, L%) per token — tuned to match the app's original purple exactly;
