@@ -383,87 +383,213 @@ function compressImage(file, maxWidth = 800, quality = 0.75) {
   });
 }
 
-/* ---------- Preset cover art (generated locally, works offline) ---------- */
+/* ---------- Preset cover art — 30 designs, generated locally (offline) ---------- */
 
-function coverIconSVG(icon) {
-  const c = "rgba(255,255,255,0.92)";
-  switch (icon) {
-    case "barbell":
-      return `<g fill="${c}">
-        <rect x="150" y="88" width="100" height="24" rx="4"/>
-        <rect x="110" y="66" width="24" height="68" rx="4"/>
-        <rect x="266" y="66" width="24" height="68" rx="4"/>
-        <rect x="86" y="76" width="18" height="48" rx="4"/>
-        <rect x="296" y="76" width="18" height="48" rx="4"/>
-      </g>`;
-    case "mountain":
-      return `<polygon points="0,200 90,90 150,150 220,60 320,160 400,120 400,200" fill="${c}"/>`;
-    case "sun":
-      return `<g fill="${c}">
-        <circle cx="200" cy="100" r="32"/>
-        ${[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-          const rad = (deg * Math.PI) / 180;
-          const x1 = 200 + Math.cos(rad) * 46, y1 = 100 + Math.sin(rad) * 46;
-          const x2 = 200 + Math.cos(rad) * 62, y2 = 100 + Math.sin(rad) * 62;
-          return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round"/>`;
-        }).join("")}
-      </g>`;
-    case "wave":
-      return `<path d="M0,140 C60,110 100,170 160,140 C220,110 260,170 320,140 C360,120 380,130 400,140 L400,200 L0,200 Z" fill="${c}"/>`;
-    case "burst":
-      return `<g fill="${c}">
-        ${Array.from({ length: 10 }).map((_, i) => {
-          const rad = (i * 36 * Math.PI) / 180;
-          const x = 200 + Math.cos(rad) * 68, y = 100 + Math.sin(rad) * 68;
-          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6"/>`;
-        }).join("")}
-        <circle cx="200" cy="100" r="24"/>
-      </g>`;
-    case "runner":
-      return `<g fill="${c}">
-        <circle cx="200" cy="58" r="14"/>
-        <rect x="190" y="76" width="20" height="46" rx="8"/>
-        <rect x="163" y="80" width="34" height="10" rx="5" transform="rotate(-20 180 85)"/>
-        <rect x="203" y="80" width="34" height="10" rx="5" transform="rotate(20 220 85)"/>
-        <rect x="176" y="118" width="12" height="46" rx="6" transform="rotate(-24 182 141)"/>
-        <rect x="208" y="118" width="12" height="46" rx="6" transform="rotate(18 214 141)"/>
-      </g>`;
-    default:
-      return "";
-  }
+let _covR = 1;
+function covSeed(s) { _covR = s; }
+function covRnd() { _covR = (_covR * 9301 + 49297) % 233280; return _covR / 233280; }
+function covSvg(inner) {
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice">' + inner + '</svg>';
+}
+function covURI(svg) {
+  return "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+}
+function covGrad(id, stops, x2, y2) {
+  return '<linearGradient id="' + id + '" x1="0" y1="0" x2="' + (x2 == null ? 0 : x2) + '" y2="' + (y2 == null ? 1 : y2) + '">' +
+    stops.map(function (s) { return '<stop offset="' + s[0] + '" stop-color="' + s[1] + '"/>'; }).join('') + '</linearGradient>';
 }
 
-function buildPresetSVG({ colors: [c1, c2], icon }) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
-    <defs>
-      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="${c1}"/>
-        <stop offset="1" stop-color="${c2}"/>
-      </linearGradient>
-    </defs>
-    <rect width="400" height="200" fill="url(#g)"/>
-    ${coverIconSVG(icon)}
-  </svg>`;
-  return "data:image/svg+xml;base64," + btoa(svg);
-}
+const COVER_BUILDERS = [
+  function () { // 01 Sunset grid
+    let slits = "";
+    for (let i = 0; i < 5; i++) slits += '<rect x="130" y="' + (108 + i * 12) + '" width="140" height="6" fill="#1b0730"/>';
+    let grid = "";
+    for (let g = -6; g <= 6; g++) grid += '<line x1="200" y1="150" x2="' + (200 + g * 90) + '" y2="200" stroke="rgba(255,60,150,.55)" stroke-width="1.5"/>';
+    for (let r = 0; r < 5; r++) grid += '<line x1="0" y1="' + (150 + r * r * 3 + r * 4) + '" x2="400" y2="' + (150 + r * r * 3 + r * 4) + '" stroke="rgba(255,60,150,.5)" stroke-width="1.5"/>';
+    return covSvg('<defs>' + covGrad('sky', [[0, '#2a0940'], [0.55, '#c81e79'], [1, '#ff9d3c']]) + '</defs><rect width="400" height="200" fill="url(#sky)"/><circle cx="200" cy="118" r="72" fill="#ffd84a"/>' + slits + grid);
+  },
+  function () { // 02 Mountain sunrise
+    return covSvg('<defs>' + covGrad('m', [[0, '#150c2e'], [0.6, '#ff6f52'], [1, '#ffd070']]) + '</defs><rect width="400" height="200" fill="url(#m)"/><circle cx="210" cy="96" r="46" fill="#fff2c2" opacity="0.92"/><polygon points="0,200 70,120 120,160 180,90 240,150 300,100 360,150 400,120 400,200" fill="#3a1d4f"/><polygon points="0,200 90,150 160,180 220,140 290,175 360,140 400,165 400,200" fill="#231133"/>');
+  },
+  function () { // 03 Topographie
+    let rings = "";
+    for (let i = 0; i < 8; i++) {
+      const s = 1 - i * 0.11;
+      rings += '<path d="M' + (60 + i * 14) + ',100 q40,' + (-70 * s) + ' 140,' + (-10 * s) + ' q90,50 60,90 q-40,50 -140,20 q-90,-30 -60,-120 Z" fill="none" stroke="#5fe3c0" stroke-width="1.6" opacity="' + (0.35 + i * 0.07) + '"/>';
+    }
+    return covSvg('<defs>' + covGrad('t', [[0, '#0c3b39'], [1, '#0f5148']]) + '</defs><rect width="400" height="200" fill="url(#t)"/>' + rings);
+  },
+  function () { // 04 Halftone diagonale
+    let d = "";
+    for (let y = 0; y < 12; y++) for (let x = 0; x < 24; x++) {
+      const t = (x + y) / 34;
+      d += '<circle cx="' + (x * 18 + 6) + '" cy="' + (y * 18 + 6) + '" r="' + (0.6 + t * 6.5).toFixed(1) + '" fill="#b9c2ff"/>';
+    }
+    return covSvg('<rect width="400" height="200" fill="#3a34c9"/>' + d);
+  },
+  function () { // 05 Bauhaus
+    return covSvg('<rect width="400" height="200" fill="#f0ece1"/><path d="M0,200 A200,200 0 0 1 200,0 L0,0 Z" fill="#ff5a36"/><rect x="230" y="0" width="70" height="200" fill="#2338ff"/><circle cx="330" cy="60" r="42" fill="#ffcf2e"/><line x1="0" y1="150" x2="400" y2="150" stroke="#111" stroke-width="4"/>');
+  },
+  function () { // 06 Aura mesh
+    return covSvg('<defs><filter id="b"><feGaussianBlur stdDeviation="34"/></filter></defs><rect width="400" height="200" fill="#12061f"/><g filter="url(#b)"><circle cx="90" cy="70" r="90" fill="#ff3d9a"/><circle cx="300" cy="150" r="100" fill="#3d7bff"/><circle cx="230" cy="40" r="70" fill="#7a3dff"/><circle cx="360" cy="60" r="60" fill="#37e0c8"/></g>');
+  },
+  function () { // 07 Deadlift — ligne
+    return covSvg('<defs>' + covGrad('dl', [[0, '#101a3a'], [1, '#26356b']]) + '</defs><rect width="400" height="200" fill="url(#dl)"/><g fill="none" stroke="#eef2ff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M120,150 L280,150 M150,150 a10,10 0 1 0 0.1,0 M250,150 a10,10 0 1 0 0.1,0"/><path d="M200,150 L200,96 M200,104 L172,132 M200,104 L228,132 M200,96 L182,70 M200,96 L220,70 M200,70 a12,12 0 1 0 0.1,0"/></g>');
+  },
+  function () { // 08 PUSH
+    return covSvg('<defs>' + covGrad('p', [[0, '#ff4d4d'], [1, '#7a1fff']], 1, 1) + '</defs><rect width="400" height="200" fill="url(#p)"/><text x="46" y="150" font-family="-apple-system, Arial, sans-serif" font-weight="800" font-size="120" fill="#0d0620" opacity="0.35">PUSH</text><text x="40" y="144" font-family="-apple-system, Arial, sans-serif" font-weight="800" font-size="120" fill="#fff">PUSH</text>');
+  },
+  function () { // 09 Speed streaks
+    covSeed(3);
+    let l = "";
+    for (let i = 0; i < 26; i++) {
+      const y = covRnd() * 200, len = 60 + covRnd() * 220, o = 0.15 + covRnd() * 0.5;
+      l += '<line x1="' + (-40 + covRnd() * 60) + '" y1="' + y + '" x2="' + len + '" y2="' + (y - 26) + '" stroke="#8fb4ff" stroke-width="' + (1 + covRnd() * 3).toFixed(1) + '" stroke-linecap="round" opacity="' + o.toFixed(2) + '"/>';
+    }
+    l += '<line x1="0" y1="120" x2="320" y2="80" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>';
+    return covSvg('<defs>' + covGrad('s', [[0, '#0b1220'], [1, '#1b3a8a']]) + '</defs><rect width="400" height="200" fill="url(#s)"/>' + l);
+  },
+  function () { // 10 Ripple
+    let a = "";
+    for (let i = 1; i <= 9; i++) a += '<circle cx="400" cy="200" r="' + (i * 42) + '" fill="none" stroke="#ffd23f" stroke-width="2.4" opacity="' + (1.05 - i * 0.1).toFixed(2) + '"/>';
+    return covSvg('<defs>' + covGrad('rp', [[0, '#20124d'], [1, '#3a1163']]) + '</defs><rect width="400" height="200" fill="url(#rp)"/>' + a);
+  },
+  function () { // 11 Triangles
+    covSeed(11);
+    const cols = ['#ff5d73', '#4dd4ff', '#ffd166', '#8a5cff'];
+    let t = "";
+    for (let i = 0; i < 22; i++) {
+      const x = covRnd() * 400, y = covRnd() * 200, s = 16 + covRnd() * 40;
+      t += '<polygon points="' + x + ',' + y + ' ' + (x + s) + ',' + y + ' ' + (x + s / 2) + ',' + (y - s) + '" fill="' + cols[i % 4] + '" opacity="' + (0.5 + covRnd() * 0.5).toFixed(2) + '"/>';
+    }
+    return covSvg('<rect width="400" height="200" fill="#131118"/>' + t);
+  },
+  function () { // 12 Blueprint
+    let g = "";
+    for (let x = 0; x <= 400; x += 20) g += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="200" stroke="rgba(120,180,255,.18)" stroke-width="1"/>';
+    for (let y = 0; y <= 200; y += 20) g += '<line x1="0" y1="' + y + '" x2="400" y2="' + y + '" stroke="rgba(120,180,255,.18)" stroke-width="1"/>';
+    return covSvg('<rect width="400" height="200" fill="#0a2143"/>' + g + '<circle cx="200" cy="100" r="58" fill="none" stroke="#7fd4ff" stroke-width="2"/><circle cx="200" cy="100" r="30" fill="none" stroke="#7fd4ff" stroke-width="1.5" stroke-dasharray="4 4"/><line x1="120" y1="100" x2="280" y2="100" stroke="#7fd4ff" stroke-width="1.5"/><line x1="200" y1="24" x2="200" y2="176" stroke="#7fd4ff" stroke-width="1.5"/>');
+  },
+  function () { // 13 Blob liquide
+    return covSvg('<defs>' + covGrad('bg', [[0, '#1a1030'], [1, '#0b1e3a']]) + covGrad('bl', [[0, '#ff6ec7'], [1, '#7873ff']], 1, 1) + '</defs><rect width="400" height="200" fill="url(#bg)"/><path d="M120,40 C200,10 320,30 340,90 C360,150 300,190 220,180 C140,170 60,150 70,100 C76,66 80,58 120,40 Z" fill="url(#bl)"/>');
+  },
+  function () { // 14 Duotone circles
+    return covSvg('<defs><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .5 0"/></filter></defs><rect width="400" height="200" fill="#faf3e6"/><circle cx="150" cy="110" r="95" fill="#ff4d6d" opacity="0.85"/><circle cx="260" cy="90" r="95" fill="#4d80ff" opacity="0.8" style="mix-blend-mode:multiply"/><rect width="400" height="200" filter="url(#n)" opacity="0.35"/>');
+  },
+  function () { // 15 Elevation
+    let b = "";
+    const cols = ['#0b3d2e', '#12664a', '#1c8f66', '#35c58c', '#7ff0c0'];
+    for (let i = 0; i < 5; i++) { const y = 40 + i * 34; b += '<path d="M0,' + y + ' q100,-26 200,0 t200,0 V200 H0 Z" fill="' + cols[i] + '"/>'; }
+    return covSvg('<rect width="400" height="200" fill="#062018"/>' + b);
+  },
+  function () { // 16 Neon horizon
+    let refl = "";
+    for (let i = 1; i <= 6; i++) refl += '<line x1="0" y1="' + (108 + i * 14) + '" x2="400" y2="' + (108 + i * 14) + '" stroke="rgba(0,240,255,' + (0.5 - i * 0.07) + ')" stroke-width="2"/>';
+    return covSvg('<defs>' + covGrad('nh', [[0, '#05010f'], [0.5, '#1a0a3d'], [1, '#03202b']]) + '</defs><rect width="400" height="200" fill="url(#nh)"/><ellipse cx="200" cy="104" rx="260" ry="40" fill="#00e5ff" opacity="0.18"/><line x1="0" y1="104" x2="400" y2="104" stroke="#5cffef" stroke-width="3"/>' + refl);
+  },
+  function () { // 17 Aura pastel
+    return covSvg('<defs><filter id="b2"><feGaussianBlur stdDeviation="30"/></filter></defs><rect width="400" height="200" fill="#f6f1fb"/><g filter="url(#b2)"><circle cx="80" cy="60" r="80" fill="#ffd7c2"/><circle cx="300" cy="140" r="90" fill="#d7c9ff"/><circle cx="220" cy="60" r="66" fill="#c2f0e0"/></g>');
+  },
+  function () { // 18 Route GPS
+    let grid = "";
+    for (let x = 0; x <= 400; x += 40) grid += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="200" stroke="rgba(255,255,255,.05)"/>';
+    for (let y = 0; y <= 200; y += 40) grid += '<line x1="0" y1="' + y + '" x2="400" y2="' + y + '" stroke="rgba(255,255,255,.05)"/>';
+    return covSvg('<defs>' + covGrad('rt', [[0, '#101828'], [1, '#1e293b']]) + '</defs><rect width="400" height="200" fill="url(#rt)"/>' + grid + '<path d="M40,160 C90,90 140,180 190,120 S280,40 320,90 S360,150 380,60" fill="none" stroke="#37e0a8" stroke-width="4" stroke-linecap="round"/><circle cx="40" cy="160" r="6" fill="#37e0a8"/><circle cx="380" cy="60" r="6" fill="#ff6b6b"/>');
+  },
+  function () { // 19 Arcs
+    let a = "";
+    const cols = ['#ff6b6b', '#ffd166', '#4dd4c4', '#5c8cff', '#a06bff'];
+    for (let i = 0; i < 5; i++) a += '<path d="M0,200 A' + (70 + i * 56) + ',' + (70 + i * 56) + ' 0 0 1 ' + (70 + i * 56) + ',200 Z" fill="none" stroke="' + cols[i] + '" stroke-width="14"/>';
+    return covSvg('<rect width="400" height="200" fill="#151226"/>' + a);
+  },
+  function () { // 20 "01"
+    return covSvg('<defs>' + covGrad('nn', [[0, '#00c6ff'], [1, '#0072ff']], 1, 1) + '</defs><rect width="400" height="200" fill="url(#nn)"/><text x="60" y="176" font-family="-apple-system, Arial, sans-serif" font-weight="800" font-size="200" fill="none" stroke="#fff" stroke-width="4">01</text><text x="60" y="176" font-family="-apple-system, Arial, sans-serif" font-weight="800" font-size="200" fill="rgba(255,255,255,.16)">01</text>');
+  },
+  function () { // 21 Rayons
+    let r = "";
+    for (let i = 0; i < 16; i++) {
+      const a1 = i / 16 * Math.PI / 2;
+      r += '<polygon points="0,0 ' + (Math.cos(a1) * 640).toFixed(0) + ',' + (Math.sin(a1) * 640).toFixed(0) + ' ' + (Math.cos(a1 + 0.05) * 640).toFixed(0) + ',' + (Math.sin(a1 + 0.05) * 640).toFixed(0) + '" fill="rgba(255,255,255,' + (i % 2 ? 0.06 : 0.16) + ')"/>';
+    }
+    return covSvg('<defs>' + covGrad('ry', [[0, '#ff9a3c'], [1, '#ff2e63']], 1, 1) + '</defs><rect width="400" height="200" fill="url(#ry)"/>' + r);
+  },
+  function () { // 22 Confetti
+    covSeed(21);
+    const cols = ['#ff5d73', '#4dd4ff', '#ffd166', '#8a5cff', '#3ee08f'];
+    let c = "";
+    for (let i = 0; i < 26; i++) {
+      const x = covRnd() * 400, y = covRnd() * 200, w = 14 + covRnd() * 26, rot = (covRnd() * 120 - 60).toFixed(0);
+      c += '<rect x="' + x.toFixed(0) + '" y="' + y.toFixed(0) + '" width="' + w.toFixed(0) + '" height="7" rx="3.5" fill="' + cols[i % 5] + '" transform="rotate(' + rot + ' ' + x.toFixed(0) + ' ' + y.toFixed(0) + ')"/>';
+    }
+    return covSvg('<rect width="400" height="200" fill="#14121c"/>' + c);
+  },
+  function () { // 23 Equalizer
+    covSeed(5);
+    let b = "";
+    for (let i = 0; i < 26; i++) { const h = 20 + covRnd() * 150; b += '<rect x="' + (i * 15.5 + 3) + '" y="' + (200 - h) + '" width="10" height="' + h + '" rx="4" fill="url(#eq)"/>'; }
+    return covSvg('<defs>' + covGrad('eqbg', [[0, '#1b0736'], [1, '#3a0d5b']]) + covGrad('eq', [[0, '#ff6ec7'], [1, '#7c4dff']]) + '</defs><rect width="400" height="200" fill="url(#eqbg)"/>' + b);
+  },
+  function () { // 24 Palm dusk
+    covSeed(9);
+    let stars = "";
+    for (let i = 0; i < 20; i++) stars += '<circle cx="' + (covRnd() * 400).toFixed(0) + '" cy="' + (covRnd() * 90).toFixed(0) + '" r="1.4" fill="#fff" opacity="' + (0.4 + covRnd() * 0.6).toFixed(2) + '"/>';
+    function palm(x, s) {
+      let f = "";
+      for (let k = -3; k <= 3; k++) f += '<path d="M' + x + ',' + (200 - 90 * s) + ' q' + (k * 18) + ',' + (-30 - Math.abs(k) * 6) + ' ' + (k * 34) + ',' + (-8 - Math.abs(k) * 10) + '" fill="none" stroke="#160a26" stroke-width="' + (5 * s) + '"/>';
+      return '<rect x="' + (x - 3 * s) + '" y="' + (200 - 90 * s) + '" width="' + (6 * s) + '" height="' + (90 * s) + '" fill="#160a26"/>' + f;
+    }
+    return covSvg('<defs>' + covGrad('pd', [[0, '#20123f'], [0.6, '#ff5a8a'], [1, '#ffb15a']]) + '</defs><rect width="400" height="200" fill="url(#pd)"/>' + stars + '<circle cx="200" cy="120" r="52" fill="#ffde8a" opacity="0.9"/>' + palm(70, 1.1) + palm(330, 0.9));
+  },
+  function () { // 25 Grid dots
+    let d = "";
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 18; x++) {
+      const bright = y === 4;
+      d += '<circle cx="' + (x * 23 + 12) + '" cy="' + (y * 23 + 12) + '" r="' + (bright ? 5 : 3.4) + '" fill="' + (bright ? '#ffffff' : '#bbf7d0') + '"/>';
+    }
+    return covSvg('<rect width="400" height="200" fill="#12934f"/>' + d);
+  },
+  function () { // 26 Mesh lines
+    let l = "";
+    for (let i = -8; i <= 20; i++) {
+      l += '<line x1="' + (i * 26) + '" y1="0" x2="' + (i * 26 - 120) + '" y2="200" stroke="rgba(255,255,255,.14)" stroke-width="1.5"/>';
+      l += '<line x1="' + (i * 26) + '" y1="0" x2="' + (i * 26 + 120) + '" y2="200" stroke="rgba(255,255,255,.14)" stroke-width="1.5"/>';
+    }
+    return covSvg('<defs>' + covGrad('ml', [[0, '#3a0ca3'], [1, '#f72585']], 1, 1) + '</defs><rect width="400" height="200" fill="url(#ml)"/>' + l);
+  },
+  function () { // 27 Burst radial
+    let d = "";
+    for (let ring = 1; ring <= 7; ring++) {
+      const n = ring * 6;
+      for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2, rr = ring * 15;
+        d += '<circle cx="' + (200 + Math.cos(a) * rr).toFixed(1) + '" cy="' + (100 + Math.sin(a) * rr * 0.9).toFixed(1) + '" r="' + (5.5 - ring * 0.6).toFixed(1) + '" fill="#ff4dcb"/>';
+      }
+    }
+    return covSvg('<rect width="400" height="200" fill="#0c0718"/>' + d + '<circle cx="200" cy="100" r="7" fill="#fff"/>');
+  },
+  function () { // 28 Split diagonal
+    return covSvg('<rect width="400" height="200" fill="#ff5a36"/><polygon points="0,200 400,0 400,200" fill="#1f2ce0"/><circle cx="200" cy="100" r="46" fill="#ffd23f"/>');
+  },
+  function () { // 29 Topo filled
+    let b = "";
+    const cols = ['#0a2540', '#123a63', '#1d5c8f', '#2f86bd', '#5bb6df'];
+    for (let i = 0; i < 5; i++) b += '<path d="M0,' + (30 + i * 36) + ' q90,' + (i % 2 ? 34 : -30) + ' 200,4 t200,-4 V200 H0 Z" fill="' + cols[i] + '"/>';
+    return covSvg('<rect width="400" height="200" fill="#04121f"/>' + b);
+  },
+  function () { // 30 Sunburst rétro
+    let w = "";
+    for (let i = 0; i < 14; i++) {
+      const a1 = -Math.PI / 2 + (i - 7) * 0.22, a2 = a1 + 0.14;
+      w += '<polygon points="200,210 ' + (200 + Math.cos(a1) * 460).toFixed(0) + ',' + (210 + Math.sin(a1) * 460).toFixed(0) + ' ' + (200 + Math.cos(a2) * 460).toFixed(0) + ',' + (210 + Math.sin(a2) * 460).toFixed(0) + '" fill="' + (i % 2 ? '#ffb03a' : '#ff6f3c') + '"/>';
+    }
+    return covSvg('<rect width="400" height="200" fill="#ffd98a"/>' + w);
+  },
+];
 
-const COVER_PRESETS = [
-  { colors: ["#f97316", "#ec4899"], icon: "barbell" },
-  { colors: ["#0ea5e9", "#14b8a6"], icon: "wave" },
-  { colors: ["#7c3aed", "#f97316"], icon: "mountain" },
-  { colors: ["#16a34a", "#4ade80"], icon: "mountain" },
-  { colors: ["#0f172a", "#334155"], icon: "sun" },
-  { colors: ["#d946ef", "#6366f1"], icon: "burst" },
-  { colors: ["#facc15", "#f97316"], icon: "runner" },
-  { colors: ["#64748b", "#1e293b"], icon: "barbell" },
-  { colors: ["#ec4899", "#a855f7"], icon: "wave" },
-  { colors: ["#84cc16", "#22c55e"], icon: "burst" },
-  { colors: ["#6c5ce7", "#5341d6"], icon: "barbell" },
-  { colors: ["#ef4444", "#f97316"], icon: "runner" },
-  { colors: ["#06b6d4", "#0891b2"], icon: "mountain" },
-  { colors: ["#111827", "#374151"], icon: "barbell" },
-  { colors: ["#fda4af", "#fdba74"], icon: "sun" },
-].map((p, i) => ({ id: `preset-${i}`, ...p, dataUrl: buildPresetSVG(p) }));
+const COVER_PRESETS = COVER_BUILDERS.map((build, i) => ({
+  id: `preset-${i}`,
+  dataUrl: covURI(build()),
+}));
 
 function renderCoverPresetGrid() {
   document.getElementById("cover-preset-grid").innerHTML = COVER_PRESETS.map((p) => `
