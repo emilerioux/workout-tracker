@@ -436,6 +436,54 @@ button:disabled {
   width: auto;
 }
 
+/* Per-set weights list */
+
+.per-set-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.per-set-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.per-set-row .per-set-n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding-bottom: 11px;
+  white-space: nowrap;
+}
+
+.per-set-row .field {
+  margin-bottom: 0;
+}
+
+.per-set-row label {
+  font-size: 11px;
+}
+
+.per-set-row .ps-remove {
+  width: auto;
+  background: none;
+  color: var(--danger);
+  padding: 0 8px 8px;
+  font-size: 15px;
+}
+
+.per-set-row .ps-remove:disabled {
+  color: var(--muted);
+}
+
+.per-set-add {
+  margin-top: 2px;
+}
+
 .draft-list {
   display: flex;
   flex-direction: column;

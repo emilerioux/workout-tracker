@@ -829,6 +829,110 @@ document.getElementById("program-select").addEventListener("change", closeExerci
 const newExerciseInput = document.getElementById("new-exercise-name");
 const newExerciseCombobox = setupCombobox(newExerciseInput, document.getElementById("new-exercise-dropdown"), allExerciseNames);
 
+/* ---------- Per-set weights (optional, opt-in via checkbox) ---------- */
+
+// A log entry may carry `perSet: [{ weight, reps }, ...]` — one object per set.
+// When present, the flat weight/sets/reps fields are kept filled as a summary
+// (heaviest set) so every existing reader keeps working unchanged.
+function summarizePerSet(perSet) {
+  const top = perSet.reduce((a, b) => (b.weight > a.weight ? b : a), perSet[0]);
+  return { weight: top.weight, sets: perSet.length, reps: top.reps };
+}
+
+function formatPerSet(perSet) {
+  return `${perSet.length} séries · ${perSet.map((s) => `${s.weight}×${s.reps}`).join(", ")}`;
+}
+
+// Reads the raw (string) values currently typed into a per-set list.
+function psReadRows(listEl) {
+  return [...listEl.querySelectorAll(".per-set-row")].map((row) => ({
+    weight: row.querySelector(".ps-weight").value,
+    reps: row.querySelector(".ps-reps").value,
+  }));
+}
+
+// Paints N set rows + an "add" button. `rows` values may be strings or numbers.
+function renderSetRows(listEl, rows) {
+  const list = rows.length ? rows : [{ weight: "", reps: "" }];
+  listEl.innerHTML =
+    list.map((r, i) => `
+      <div class="per-set-row">
+        <span class="per-set-n">Série ${i + 1}</span>
+        <div class="field">
+          <label>Poids (lb)</label>
+          <input type="number" class="ps-weight" step="0.5" min="0" value="${esc(r.weight ?? "")}">
+        </div>
+        <div class="field">
+          <label>Reps</label>
+          <input type="number" class="ps-reps" min="1" value="${esc(r.reps ?? "")}">
+        </div>
+        <button type="button" class="ps-remove" aria-label="Retirer la série" ${list.length === 1 ? "disabled" : ""}>✕</button>
+      </div>
+    `).join("") +
+    `<button type="button" class="per-set-add secondary-btn">+ Ajouter une série</button>`;
+}
+
+// Parsed + validated rows, ready to store. Returns null if any kept row is incomplete.
+function readSetRows(listEl) {
+  const raw = psReadRows(listEl).filter((r) => r.weight !== "" || r.reps !== "");
+  if (!raw.length) return null;
+  const parsed = raw.map((r) => ({ weight: Number(r.weight), reps: Number(r.reps) }));
+  if (parsed.some((r) => !Number.isFinite(r.weight) || !Number.isFinite(r.reps) || r.reps < 1)) return null;
+  return parsed;
+}
+
+// Toggles a form between the single weight/sets/reps row and the per-set list.
+// Also drops `required` from the hidden inputs (a hidden required control blocks submit).
+function setPerSetMode(scope, on) {
+  const single = document.getElementById(`${scope}-single-fields`);
+  const list = document.getElementById(`${scope}-per-set-list`);
+  single.classList.toggle("hidden", on);
+  list.classList.toggle("hidden", !on);
+  single.querySelectorAll("input").forEach((inp) => { inp.required = !on; });
+}
+
+// Seed rows from whatever is already typed in the single fields (repeated `count` times).
+function seedPerSetRows(scope, count) {
+  const single = document.getElementById(`${scope}-single-fields`);
+  const weight = single.querySelector('[id$="weight"]').value;
+  const reps = single.querySelector('[id$="reps"]').value;
+  const n = Math.max(1, Number(count) || Number(single.querySelector('[id$="sets"]').value) || 3);
+  return Array.from({ length: n }, () => ({ weight, reps }));
+}
+
+// Wire add/remove for both per-set lists once (innerHTML swaps keep the container).
+["log-per-set-list", "guided-per-set-list"].forEach((listId) => {
+  const listEl = document.getElementById(listId);
+  listEl.addEventListener("click", (e) => {
+    const rows = psReadRows(listEl);
+    if (e.target.closest(".per-set-add")) {
+      rows.push({ weight: "", reps: "" });
+      renderSetRows(listEl, rows);
+    } else if (e.target.closest(".ps-remove") && !e.target.closest(".ps-remove").disabled) {
+      const i = [...listEl.querySelectorAll(".per-set-row")].indexOf(e.target.closest(".per-set-row"));
+      if (rows.length > 1) {
+        rows.splice(i, 1);
+        renderSetRows(listEl, rows);
+      }
+    }
+  });
+});
+
+document.getElementById("log-per-set-toggle").addEventListener("change", (e) => {
+  const on = e.target.checked;
+  setPerSetMode("log", on);
+  if (on) renderSetRows(document.getElementById("log-per-set-list"), seedPerSetRows("log"));
+});
+
+document.getElementById("guided-per-set-toggle").addEventListener("change", (e) => {
+  const on = e.target.checked;
+  setPerSetMode("guided", on);
+  if (on) {
+    const step = guidedSteps[guidedIndex];
+    renderSetRows(document.getElementById("guided-per-set-list"), seedPerSetRows("guided", step && step.sets));
+  }
+});
+
 function renderLog() {
   const container = document.getElementById("log-list");
 
@@ -853,7 +957,7 @@ function renderLog() {
           <div class="log-entry">
             <div class="info">
               <strong>${esc(entry.exercise)}</strong>
-              <span>${entry.weight} lb × ${entry.sets} séries × ${entry.reps} reps</span>
+              <span>${entry.perSet ? esc(formatPerSet(entry.perSet)) : `${entry.weight} lb × ${entry.sets} séries × ${entry.reps} reps`}</span>
               ${entry.workoutName ? `<span class="tag">${esc(entry.workoutName)}</span>` : ""}
             </div>
             <button class="menu-btn" data-id="${entry.id}">⋯</button>
@@ -868,6 +972,9 @@ function resetLogForm() {
   editingLogId = null;
   document.getElementById("log-submit-btn").textContent = "Ajouter";
   document.getElementById("log-cancel-btn").classList.add("hidden");
+  document.getElementById("log-per-set-toggle").checked = false;
+  setPerSetMode("log", false);
+  document.getElementById("log-per-set-list").innerHTML = "";
 }
 
 document.getElementById("log-form").addEventListener("submit", (e) => {
@@ -876,9 +983,24 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
   const programId = document.getElementById("program-select").value;
   const program = workouts.find((w) => w.id === programId);
   const exercise = document.getElementById("exercise").value.trim();
-  const weight = Number(document.getElementById("weight").value);
-  const sets = Number(document.getElementById("sets").value);
-  const reps = Number(document.getElementById("reps").value);
+
+  const perSetOn = document.getElementById("log-per-set-toggle").checked;
+  let perSet = null;
+  if (perSetOn) {
+    perSet = readSetRows(document.getElementById("log-per-set-list"));
+    if (!perSet) {
+      showToast("Chaque série a besoin d'un poids et de reps");
+      return;
+    }
+  }
+
+  const { weight, sets, reps } = perSet
+    ? summarizePerSet(perSet)
+    : {
+        weight: Number(document.getElementById("weight").value),
+        sets: Number(document.getElementById("sets").value),
+        reps: Number(document.getElementById("reps").value),
+      };
   const previousBest = Math.max(0, ...logs.filter((l) => l.exercise === exercise).map((l) => l.weight));
 
   if (editingLogId) {
@@ -889,11 +1011,14 @@ document.getElementById("log-form").addEventListener("submit", (e) => {
       workoutId: program ? program.id : null,
       workoutName: program ? program.name : null,
     });
+    if (perSet) entry.perSet = perSet;
+    else delete entry.perSet;
   } else {
     const now = new Date();
     logs.push({
       id: crypto.randomUUID(),
       exercise, weight, sets, reps,
+      ...(perSet ? { perSet } : {}),
       date: now.toISOString().slice(0, 10),
       createdAt: now.getTime(),
       workoutId: program ? program.id : null,
@@ -938,6 +1063,13 @@ function editLogEntry(id) {
   document.getElementById("weight").value = entry.weight;
   document.getElementById("sets").value = entry.sets;
   document.getElementById("reps").value = entry.reps;
+
+  const perSetToggle = document.getElementById("log-per-set-toggle");
+  perSetToggle.checked = Boolean(entry.perSet);
+  setPerSetMode("log", perSetToggle.checked);
+  if (entry.perSet) renderSetRows(document.getElementById("log-per-set-list"), entry.perSet);
+  else document.getElementById("log-per-set-list").innerHTML = "";
+
   document.getElementById("log-submit-btn").textContent = "Mettre à jour";
   document.getElementById("log-cancel-btn").classList.remove("hidden");
   switchView("view-log");
@@ -1486,6 +1618,19 @@ function renderGuidedStep() {
   document.getElementById("guided-sets").value = draft ? draft.sets : (step.sets || "");
   document.getElementById("guided-reps").value = draft ? draft.reps : (repsMatch ? repsMatch[0] : "");
 
+  const usePerSet = Boolean(draft && draft.usePerSet);
+  document.getElementById("guided-per-set-toggle").checked = usePerSet;
+  setPerSetMode("guided", usePerSet);
+  const guidedList = document.getElementById("guided-per-set-list");
+  if (usePerSet) {
+    const rows = draft.perSet && draft.perSet.length
+      ? draft.perSet
+      : Array.from({ length: Math.max(1, step.sets || 3) }, () => ({ weight: "", reps: repsMatch ? repsMatch[0] : "" }));
+    renderSetRows(guidedList, rows);
+  } else {
+    guidedList.innerHTML = "";
+  }
+
   const lastEntry = logs
     .filter((l) => l.exercise === step.name)
     .sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -1493,10 +1638,13 @@ function renderGuidedStep() {
 }
 
 function saveCurrentGuidedDraft() {
+  const usePerSet = document.getElementById("guided-per-set-toggle").checked;
   guidedDrafts[guidedIndex] = {
     weight: document.getElementById("guided-weight").value,
     sets: document.getElementById("guided-sets").value,
     reps: document.getElementById("guided-reps").value,
+    usePerSet,
+    perSet: usePerSet ? psReadRows(document.getElementById("guided-per-set-list")) : null,
   };
 }
 
@@ -1523,15 +1671,31 @@ document.getElementById("guided-form").addEventListener("submit", (e) => {
   const step = guidedSteps[guidedIndex];
   const program = workouts.find((w) => w.id === guidedProgramId);
   const now = new Date();
-  const weight = Number(document.getElementById("guided-weight").value);
+
+  const perSetOn = document.getElementById("guided-per-set-toggle").checked;
+  let perSet = null;
+  if (perSetOn) {
+    perSet = readSetRows(document.getElementById("guided-per-set-list"));
+    if (!perSet) {
+      showToast("Chaque série a besoin d'un poids et de reps");
+      return;
+    }
+  }
+
+  const { weight, sets, reps } = perSet
+    ? summarizePerSet(perSet)
+    : {
+        weight: Number(document.getElementById("guided-weight").value),
+        sets: Number(document.getElementById("guided-sets").value),
+        reps: Number(document.getElementById("guided-reps").value),
+      };
   const previousBest = Math.max(0, ...logs.filter((l) => l.exercise === step.name).map((l) => l.weight));
 
   logs.push({
     id: crypto.randomUUID(),
     exercise: step.name,
-    weight,
-    sets: Number(document.getElementById("guided-sets").value),
-    reps: Number(document.getElementById("guided-reps").value),
+    weight, sets, reps,
+    ...(perSet ? { perSet } : {}),
     date: now.toISOString().slice(0, 10),
     createdAt: now.getTime(),
     workoutId: program ? program.id : null,
