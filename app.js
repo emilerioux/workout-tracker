@@ -63,6 +63,8 @@ let draftCover = null;
 let editingDraftIndex = null;
 let editingLogId = null;
 let editingWorkoutId = null;
+let progressMetric = "weight";
+let lastProgressExercise = null;
 
 function formatDate(isoDate) {
   const d = new Date(isoDate);
@@ -122,8 +124,8 @@ const ACCENT_COLORS = [
 // (S%, L%) per token — tuned to match the app's original purple exactly;
 // applying any hue through this recipe keeps the same contrast/feel.
 const ACCENT_RECIPE = {
-  light: { primary: [74, 63], primaryDark: [65, 55], primaryLight: [62, 73], tint: [35, 93], hover: [80, 96] },
-  dark: { primary: [87, 72], primaryDark: [74, 63], primaryLight: [45, 48], tint: [24, 20], hover: [23, 23] },
+  light: { primary: [74, 63], primaryDark: [65, 55], primaryLight: [62, 73], primaryLite: [78, 75], tint: [35, 93], hover: [80, 96] },
+  dark: { primary: [87, 72], primaryDark: [74, 63], primaryLight: [45, 48], primaryLite: [85, 80], tint: [24, 20], hover: [23, 23] },
 };
 
 function hslToHex(h, s, l) {
@@ -151,6 +153,7 @@ function applyAccentHue(hue) {
   root.setProperty("--primary", primary);
   root.setProperty("--primary-dark", hslToHex(hue, ...recipe.primaryDark));
   root.setProperty("--primary-light", hslToHex(hue, ...recipe.primaryLight));
+  root.setProperty("--primary-lite", hslToHex(hue, ...recipe.primaryLite));
   root.setProperty("--tint", hslToHex(hue, ...recipe.tint));
   root.setProperty("--hover", hslToHex(hue, ...recipe.hover));
   // Keep the iOS status bar / PWA chrome in sync with the current theme + accent.
@@ -329,6 +332,7 @@ function renderBodyweight() {
 
   if (sorted.length === 0) {
     statsBox.innerHTML = "";
+    addTrendBadge(chartBox, null);
     chartBox.innerHTML = `<p class="empty-state">Ajoute ta première pesée pour voir ta courbe ici.</p>`;
     listBox.innerHTML = "";
     return;
@@ -336,21 +340,22 @@ function renderBodyweight() {
 
   const points = sorted.map((b) => ({ date: b.date, value: b.weight }));
   const latest = points[points.length - 1].value;
-  const first = points[0].value;
-  const diff = latest - first;
+  const diff = latest - points[0].value;
 
   statsBox.innerHTML = `
-    <div class="stat-box">
+    <div class="stat-box hero">
       <div class="value">${latest} lb</div>
       <div class="label">Actuel</div>
     </div>
-    <div class="stat-box">
-      <div class="value">${diff >= 0 ? "+" : ""}${diff.toFixed(1)} lb</div>
+    <div class="stat-box delta">
+      <div class="value ${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "▲ +" : "▼ "}${Math.abs(diff).toFixed(1)}</div>
       <div class="label">Depuis le début</div>
     </div>
   `;
 
-  chartBox.innerHTML = buildLineChartSVG(points, "lb");
+  chartBox.innerHTML = buildLineChartSVG(points, "lb", { uid: "bw" });
+  addTrendBadge(chartBox, computeTrend(points, 30), "lb");
+  wireChartCrosshair(chartBox, points, (p) => `${formatDateShort(p.date)} · ${p.value} lb`);
 
   const recent = [...sorted].reverse().slice(0, 15);
   listBox.innerHTML = recent.map((b) => `
@@ -933,6 +938,14 @@ document.getElementById("guided-per-set-toggle").addEventListener("change", (e) 
   }
 });
 
+// Stable colour per program, for the coloured rail on log rows.
+const LOG_ACCENTS = ["#6c5ce7", "#00b894", "#c98a12", "#e5484d", "#0ea5e9", "#d946ef"];
+function workoutAccent(workoutId) {
+  if (!workoutId) return null;
+  const i = workouts.findIndex((w) => w.id === workoutId);
+  return i >= 0 ? LOG_ACCENTS[i % LOG_ACCENTS.length] : null;
+}
+
 function renderLog() {
   const container = document.getElementById("log-list");
 
@@ -953,16 +966,26 @@ function renderLog() {
     .map(([date, entries]) => `
       <div class="day-group">
         <h2>${formatDate(date)}</h2>
-        ${entries.map((entry) => `
-          <div class="log-entry">
+        ${entries.map((entry) => {
+          const acc = workoutAccent(entry.workoutId);
+          const prev = sorted.find((l) => l.exercise === entry.exercise && l.createdAt < entry.createdAt);
+          const d = prev ? entry.weight - prev.weight : 0;
+          const delta = d !== 0
+            ? `<span class="log-delta ${d > 0 ? "up" : "down"}">${d > 0 ? "▲ +" : "▼ "}${Math.abs(d)}</span>`
+            : "";
+          const detail = entry.perSet
+            ? esc(formatPerSet(entry.perSet))
+            : `${entry.weight} lb · ${entry.sets} × ${entry.reps}`;
+          return `
+          <div class="log-entry${acc ? " acc" : ""}"${acc ? ` style="--log-accent:${acc}"` : ""}>
             <div class="info">
-              <strong>${esc(entry.exercise)}</strong>
-              <span>${entry.perSet ? esc(formatPerSet(entry.perSet)) : `${entry.weight} lb × ${entry.sets} séries × ${entry.reps} reps`}</span>
-              ${entry.workoutName ? `<span class="tag">${esc(entry.workoutName)}</span>` : ""}
+              <strong>${esc(entry.exercise)}${delta}</strong>
+              <span>${detail}</span>
+              ${entry.workoutName ? `<span class="prog">${esc(entry.workoutName)}</span>` : ""}
             </div>
             <button class="menu-btn" data-id="${entry.id}">⋯</button>
-          </div>
-        `).join("")}
+          </div>`;
+        }).join("")}
       </div>
     `)
     .join("");
@@ -1360,7 +1383,7 @@ function renderWorkouts() {
             </div>
           </div>
         `).join("")}
-        <button type="button" class="start-btn" data-id="${w.id}">▶ Démarrer la séance</button>
+        <button type="button" class="start-btn" data-id="${w.id}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg> Démarrer la séance</button>
       </div>
     `)
     .join("");
@@ -1391,8 +1414,9 @@ function deleteWorkout(id) {
 }
 
 document.getElementById("workout-list").addEventListener("click", (e) => {
-  if (e.target.matches(".start-btn")) {
-    startGuidedSession(e.target.dataset.id);
+  const start = e.target.closest(".start-btn");
+  if (start) {
+    startGuidedSession(start.dataset.id);
     return;
   }
 
@@ -1423,9 +1447,6 @@ function populateProgressSelect() {
 
 document.getElementById("progress-exercise-select").addEventListener("change", renderProgress);
 
-let progressMetric = "weight";
-let lastProgressExercise = null;
-
 document.getElementById("metric-toggle").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-metric]");
   if (!btn) return;
@@ -1439,64 +1460,206 @@ function setMetricToggle(metric) {
   document.querySelectorAll("#metric-toggle button").forEach((b) => b.classList.toggle("active", b.dataset.metric === metric));
 }
 
-function buildLineChartSVG(points, unit) {
-  const width = 300;
-  const height = 160;
-  const padL = 32;
-  const padR = 12;
-  const padT = 14;
-  const padB = 22;
-
-  const weights = points.map((p) => p.value);
-  let min = Math.min(...weights);
-  let max = Math.max(...weights);
-  if (min === max) {
-    min -= 5;
-    max += 5;
+// Catmull-Rom through the points, emitted as cubic Béziers (smooth line).
+function smoothPath(pts) {
+  if (pts.length < 3) {
+    return pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
   }
-  const yPad = (max - min) * 0.15;
-  min -= yPad;
-  max += yPad;
-
-  const xStep = points.length > 1 ? (width - padL - padR) / (points.length - 1) : 0;
-  const yScale = (v) => height - padB - ((v - min) / (max - min)) * (height - padT - padB);
-  const xOf = (i) => padL + i * xStep;
-
-  const coords = points.map((p, i) => [xOf(i), yScale(p.value)]);
-  const linePath = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-
-  const gridLines = [0, 0.5, 1].map((f) => {
-    const v = min + (max - min) * f;
-    const y = yScale(v);
-    return `
-      <line class="chart-grid" x1="${padL}" y1="${y}" x2="${width - padR}" y2="${y}" />
-      <text class="chart-label" x="2" y="${y + 3}">${Math.round(v)}</text>
-    `;
-  }).join("");
-
-  const showEvery = points.length <= 6 ? 1 : Math.ceil(points.length / 5);
-  const xLabels = points.map((p, i) => {
-    if (i % showEvery !== 0 && i !== points.length - 1) return "";
-    const [x] = coords[i];
-    return `<text class="chart-label" x="${x}" y="${height - 4}" text-anchor="middle">${formatDateShort(p.date)}</text>`;
-  }).join("");
-
-  const circles = coords.map(([x, y], i) =>
-    `<circle class="chart-point" cx="${x}" cy="${y}" r="3"><title>${points[i].value} ${unit} — ${formatDateShort(points[i].date)}</title></circle>`
-  ).join("");
-
-  return `
-    <svg viewBox="0 0 ${width} ${height}">
-      ${gridLines}
-      <path class="chart-line" d="${linePath}" />
-      ${circles}
-      ${xLabels}
-    </svg>
-  `;
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
 }
+
+// Change over the last `days` days, or null if <2 points fall in that window.
+function computeTrend(points, days) {
+  if (points.length < 2) return null;
+  const cutoff = new Date(points[points.length - 1].date);
+  cutoff.setDate(cutoff.getDate() - days);
+  const iso = cutoff.toISOString().slice(0, 10);
+  const win = points.filter((p) => p.date >= iso);
+  if (win.length < 2) return null;
+  const delta = points[points.length - 1].value - win[0].value;
+  if (delta === 0) return null;
+  return { dir: delta > 0 ? "up" : "down", delta: Math.abs(delta) };
+}
+
+// Tiny axis-less sparkline for the exercise chips.
+function miniSpark(vals) {
+  if (vals.length < 2) return "";
+  const w = 38, h = 13;
+  let mn = Math.min(...vals), mx = Math.max(...vals);
+  if (mn === mx) { mn -= 1; mx += 1; }
+  const pts = vals.map((v, i) => [
+    (i / (vals.length - 1)) * w,
+    h - ((v - mn) / (mx - mn)) * h,
+  ]);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path class="spark" d="${smoothPath(pts)}"/></svg>`;
+}
+
+function buildLineChartSVG(points, unit, opts = {}) {
+  const W = 300, H = 172;
+  const pad = { l: 12, r: 16, t: 30, b: 22 };
+  const uid = opts.uid || "c" + Math.random().toString(36).slice(2, 8);
+
+  const vals = points.map((p) => p.value);
+  let min = Math.min(...vals);
+  let max = Math.max(...vals);
+  if (opts.prValue != null) max = Math.max(max, opts.prValue);
+  if (min === max) { min -= 5; max += 5; }
+  const yp = (max - min) * 0.16;
+  min -= yp;
+  max += yp * 1.3;
+
+  const xStep = points.length > 1 ? (W - pad.l - pad.r) / (points.length - 1) : 0;
+  const xOf = (i) => pad.l + i * xStep;
+  const yOf = (v) => H - pad.b - ((v - min) / (max - min)) * (H - pad.t - pad.b);
+  const coords = points.map((p, i) => [xOf(i), yOf(p.value)]);
+
+  const line = smoothPath(coords);
+  const base = H - pad.b;
+  const last = coords[coords.length - 1];
+  const area = `${line} L${last[0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`;
+
+  const grid = [0.75, 0.25].map((f) => {
+    const y = pad.t + f * (H - pad.t - pad.b);
+    return `<line class="chart-grid" x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}"/>`;
+  }).join("");
+
+  let pr = "";
+  if (opts.prValue != null && points.length >= 2) {
+    const pyv = yOf(opts.prValue);
+    const pri = points.findIndex((p) => p.value === opts.prValue);
+    pr =
+      `<line class="chart-pr-line" x1="${pad.l}" y1="${pyv.toFixed(1)}" x2="${W - pad.r}" y2="${pyv.toFixed(1)}"/>` +
+      (pri >= 0 ? `<circle class="chart-pr-dot" cx="${coords[pri][0].toFixed(1)}" cy="${coords[pri][1].toFixed(1)}" r="4"/>` : "") +
+      `<text class="chart-pr-label" x="${pad.l}" y="${(pyv - 5).toFixed(1)}">Record · ${opts.prValue} ${unit}</text>`;
+  }
+
+  const label = `${points[points.length - 1].value} ${unit}`;
+  const pillW = Math.max(30, label.length * 5.8);
+  const px = Math.min(Math.max(last[0] - pillW / 2, pad.l), W - pad.r - pillW);
+  const py = Math.max(last[1] - 22, 2);
+  const endcap =
+    `<circle class="chart-point-last" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5"/>` +
+    `<rect class="chart-endcap-box" x="${px.toFixed(1)}" y="${py.toFixed(1)}" width="${pillW.toFixed(1)}" height="16" rx="5"/>` +
+    `<text class="chart-endcap-text" x="${(px + pillW / 2).toFixed(1)}" y="${(py + 11).toFixed(1)}" text-anchor="middle">${label}</text>`;
+
+  const xl =
+    `<text class="chart-label" x="${coords[0][0].toFixed(1)}" y="${H - 6}">${formatDateShort(points[0].date)}</text>` +
+    `<text class="chart-label" x="${(W - pad.r).toFixed(1)}" y="${H - 6}" text-anchor="end">${formatDateShort(points[points.length - 1].date)}</text>`;
+
+  const defs =
+    `<defs><linearGradient id="grad-${uid}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" style="stop-color:var(--primary);stop-opacity:0.28"/>` +
+    `<stop offset="1" style="stop-color:var(--primary);stop-opacity:0"/></linearGradient></defs>`;
+
+  const cross = `<g class="chart-crosshair"><line y1="${pad.t}" y2="${H - pad.b}"/><circle r="4"/></g>`;
+  const hit = `<rect class="chart-hit" x="0" y="0" width="${W}" height="${H}"/>`;
+  const dc = JSON.stringify(coords.map((c) => [Math.round(c[0] * 10) / 10, Math.round(c[1] * 10) / 10]));
+
+  return `<svg viewBox="0 0 ${W} ${H}" data-w="${W}" data-h="${H}" data-padl="${pad.l}" data-padr="${pad.r}" data-coords='${dc}'>` +
+    defs + grid +
+    `<path class="chart-area" d="${area}" fill="url(#grad-${uid})"/>` +
+    `<path class="chart-line" d="${line}"/>` +
+    pr + xl + endcap + cross + hit +
+    `</svg>`;
+}
+
+// Floating "▲ +X unit / 30 j" badge inside a chart container.
+function addTrendBadge(container, trend, unit) {
+  const old = container.querySelector(".chart-trend");
+  if (old) old.remove();
+  if (!trend) return;
+  const el = document.createElement("div");
+  el.className = "chart-trend " + trend.dir;
+  const d = Math.round(trend.delta * 10) / 10;
+  el.textContent = `${trend.dir === "up" ? "▲ +" : "▼ "}${d} ${unit} / 30 j`;
+  container.appendChild(el);
+}
+
+// Crosshair + tooltip that follows the finger (replaces the unusable <title> hover).
+function wireChartCrosshair(container, points, formatTip) {
+  const svg = container.querySelector("svg");
+  if (!svg) return;
+  const hit = svg.querySelector(".chart-hit");
+  const cross = svg.querySelector(".chart-crosshair");
+  if (!hit || !cross) return;
+  const cl = cross.querySelector("line");
+  const cd = cross.querySelector("circle");
+  const W = +svg.dataset.w, H = +svg.dataset.h, padl = +svg.dataset.padl, padr = +svg.dataset.padr;
+  const coords = JSON.parse(svg.dataset.coords || "[]");
+  const n = points.length;
+  const xStep = n > 1 ? (W - padl - padr) / (n - 1) : 1;
+
+  let tip = container.querySelector(".chart-tooltip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.className = "chart-tooltip";
+    container.appendChild(tip);
+  }
+
+  function move(clientX) {
+    const box = svg.getBoundingClientRect();
+    const rel = ((clientX - box.left) / box.width) * W;
+    let i = Math.round((rel - padl) / xStep);
+    i = Math.max(0, Math.min(n - 1, i));
+    const [cx, cy] = coords[i];
+    cl.setAttribute("x1", cx);
+    cl.setAttribute("x2", cx);
+    cd.setAttribute("cx", cx);
+    cd.setAttribute("cy", cy);
+    cross.style.opacity = "1";
+    tip.textContent = formatTip(points[i]);
+    tip.style.left = (cx / W) * 100 + "%";
+    tip.style.top = (cy / H) * 100 + "%";
+    tip.classList.add("show");
+  }
+  function end() {
+    cross.style.opacity = "0";
+    tip.classList.remove("show");
+  }
+  hit.addEventListener("pointermove", (e) => move(e.clientX));
+  hit.addEventListener("pointerdown", (e) => move(e.clientX));
+  hit.addEventListener("pointerleave", end);
+  hit.addEventListener("pointerup", end);
+}
+
+function renderExerciseChips() {
+  const box = document.getElementById("progress-exercise-chips");
+  if (!box) return;
+  const current = document.getElementById("progress-exercise-select").value;
+  const names = allExerciseNames();
+  box.innerHTML = names.map((n) => {
+    const series = logs
+      .filter((l) => l.exercise === n)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((l) => l.weight);
+    return `<button type="button" class="ex-chip ${n === current ? "on" : ""}" data-name="${esc(n)}">${esc(n)}${miniSpark(series)}</button>`;
+  }).join("");
+
+  const on = box.querySelector(".ex-chip.on");
+  if (on) {
+    const rel = on.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft;
+    box.scrollLeft = rel - box.clientWidth / 2 + on.clientWidth / 2;
+  }
+}
+
+document.getElementById("progress-exercise-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".ex-chip");
+  if (!chip) return;
+  const select = document.getElementById("progress-exercise-select");
+  select.value = chip.dataset.name;
+  select.dispatchEvent(new Event("change"));
+});
 
 function renderProgress() {
   populateProgressSelect();
+  renderExerciseChips();
 
   const select = document.getElementById("progress-exercise-select");
   const statsBox = document.getElementById("progress-stats");
@@ -1505,6 +1668,7 @@ function renderProgress() {
 
   if (!exercise) {
     statsBox.innerHTML = "";
+    addTrendBadge(chartBox, null);
     chartBox.innerHTML = `<p class="empty-state">Log un exercice pour voir ta progression ici.</p>`;
     return;
   }
@@ -1515,6 +1679,7 @@ function renderProgress() {
 
   if (exerciseLogs.length === 0) {
     statsBox.innerHTML = "";
+    addTrendBadge(chartBox, null);
     chartBox.innerHTML = `<p class="empty-state">Aucune donnée pour cet exercice.</p>`;
     return;
   }
@@ -1529,25 +1694,34 @@ function renderProgress() {
   const points = exerciseLogs.map((l) => ({
     date: l.date,
     value: progressMetric === "weight" ? l.weight : l.reps,
+    reps: l.reps,
   }));
 
   const best = Math.max(...points.map((p) => p.value));
   const latest = points[points.length - 1].value;
-  const first = points[0].value;
-  const diff = latest - first;
+  const diff = latest - points[0].value;
 
   statsBox.innerHTML = `
-    <div class="stat-box">
-      <div class="value">${best} ${unit}</div>
-      <div class="label">Record 🏆</div>
+    <div class="stat-box hero">
+      <div class="value">${latest} ${unit}</div>
+      <div class="label">Actuel</div>
     </div>
-    <div class="stat-box">
-      <div class="value">${diff >= 0 ? "+" : ""}${diff} ${unit}</div>
+    <div class="stat-box gold">
+      <div class="value">${best} ${unit}</div>
+      <div class="label">Record</div>
+    </div>
+    <div class="stat-box delta">
+      <div class="value ${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "▲ +" : "▼ "}${Math.abs(diff)}</div>
       <div class="label">Depuis le début</div>
     </div>
   `;
 
-  chartBox.innerHTML = buildLineChartSVG(points, unit);
+  chartBox.innerHTML = buildLineChartSVG(points, unit, { prValue: best, uid: "ex" });
+  addTrendBadge(chartBox, computeTrend(points, 30), unit);
+  wireChartCrosshair(chartBox, points, (p) =>
+    `${formatDateShort(p.date)} · ${p.value} ${unit}` +
+    (progressMetric === "weight" && p.reps != null ? ` × ${p.reps} reps` : "")
+  );
 }
 
 /* ---------- Guided session ---------- */
