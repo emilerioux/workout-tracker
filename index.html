@@ -1,370 +1,269 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Mes Workouts</title>
-  <link rel="stylesheet" href="style.css?v=14">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-180.png">
-  <meta name="theme-color" content="#6c5ce7">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reps</title>
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Reps">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="style.css?v=2">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
 </head>
 <body>
-  <header>
-    <h1>
-      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
-      Mes Workouts
-    </h1>
-    <p id="encouragement"></p>
-  </header>
 
-  <main>
-    <!-- ONGLET: LOG -->
-    <section id="view-log" class="view">
-      <form id="log-form">
-        <div class="field">
-          <label for="program-select">Programme</label>
-          <select id="program-select">
-            <option value="">Libre (tous les exercices)</option>
-          </select>
-        </div>
+<div class="app" id="app">
 
-        <div class="field">
-          <label for="exercise">Exercice</label>
-          <div class="combobox-wrap">
-            <input type="text" id="exercise" autocomplete="off" placeholder="Ex: Développé couché" required>
-            <span class="combobox-arrow">▾</span>
-            <div id="exercise-dropdown" class="combobox-dropdown"></div>
-          </div>
-          <p id="exercise-note-hint" class="exercise-note-hint hidden"></p>
-        </div>
+  <!-- ══ PAGES D'ONGLET ══════════════════════════════════ -->
+  <main class="pages" id="pages">
 
-        <div class="row" id="log-single-fields">
-          <div class="field">
-            <label for="weight">Poids (lb)</label>
-            <input type="number" id="weight" step="0.5" min="0" required>
-          </div>
-          <div class="field">
-            <label for="sets">Séries</label>
-            <input type="number" id="sets" min="1" required>
-          </div>
-          <div class="field">
-            <label for="reps">Reps</label>
-            <input type="number" id="reps" min="1" required>
-          </div>
-        </div>
-
-        <label class="checkbox-row" id="log-per-set-wrap">
-          <input type="checkbox" id="log-per-set-toggle">
-          Poids différents par série
-        </label>
-        <div id="log-per-set-list" class="per-set-list hidden"></div>
-
-        <div class="form-actions">
-          <button type="submit" id="log-submit-btn">Ajouter</button>
-          <button type="button" id="log-cancel-btn" class="secondary-btn hidden">Annuler</button>
-        </div>
-      </form>
-
-      <section id="log-list"></section>
+    <!-- ── Programmes ── -->
+    <section class="page" id="page-programmes" data-tab="programmes">
+      <div class="page-bar"><span class="page-bar-title">Programmes</span></div>
+      <div class="page-scroll">
+        <h1 class="big-title">Programmes</h1>
+        <p class="big-sub" id="prog-sub"></p>
+        <div id="program-list" class="prog-list"></div>
+        <button class="tile-btn" id="new-program-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Nouveau programme
+        </button>
+      </div>
     </section>
 
-    <!-- ONGLET: PROGRAMMES -->
-    <section id="view-workouts" class="view active">
-      <div id="workout-list"></div>
+    <!-- ── Historique ── -->
+    <section class="page" id="page-historique" data-tab="historique" hidden>
+      <div class="page-bar"><span class="page-bar-title">Historique</span></div>
+      <div class="page-scroll">
+        <h1 class="big-title">Historique</h1>
+        <p class="big-sub" id="hist-sub"></p>
+        <button class="tile-btn" id="quick-log-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Ajouter une entrée
+        </button>
+        <div id="log-list" class="log-list"></div>
+      </div>
+    </section>
 
-      <form id="workout-form">
-        <div class="field">
-          <label for="workout-name">Nom du programme</label>
-          <input type="text" id="workout-name" placeholder="Ex: Push Day">
+    <!-- ── Progrès ── -->
+    <section class="page" id="page-progres" data-tab="progres" hidden>
+      <div class="page-bar"><span class="page-bar-title">Progrès</span></div>
+      <div class="page-scroll">
+        <h1 class="big-title">Progrès</h1>
+
+        <div class="segmented" id="prog-mode">
+          <button type="button" data-mode="exercices" class="on">Exercices</button>
+          <button type="button" data-mode="poids">Poids</button>
+          <button type="button" data-mode="photos">Photos</button>
         </div>
 
-        <div class="field">
-          <label>Photo de couverture (optionnel)</label>
-          <div class="cover-picker">
-            <img id="workout-cover-preview" class="cover-preview hidden" alt="Aperçu de la couverture">
-            <button type="button" id="workout-cover-btn" class="secondary-btn">Choisir une image</button>
-            <button type="button" id="workout-cover-remove" class="secondary-btn hidden">Retirer</button>
+        <!-- exercices -->
+        <div id="mode-exercices">
+          <button class="picker-pill" id="ex-picker-btn">
+            <span id="ex-picker-label">Choisir un exercice</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="segmented small" id="metric-toggle">
+            <button type="button" data-metric="weight" class="on">Poids</button>
+            <button type="button" data-metric="reps">Reps</button>
           </div>
-          <input type="file" id="workout-cover-input" accept="image/*" class="hidden">
+          <div id="ex-stats" class="stat-row"></div>
+          <div class="card-surface">
+            <div id="ex-chart" class="chart-host"></div>
+          </div>
+          <button class="link-btn" id="ex-table-btn" aria-expanded="false">Voir les valeurs</button>
+          <div id="ex-table" class="value-table" hidden></div>
         </div>
 
-        <div class="exercise-builder">
-          <div class="field">
-            <label for="new-exercise-name">Exercice</label>
-            <div class="combobox-wrap">
-              <input type="text" id="new-exercise-name" autocomplete="off" placeholder="Ex: Développé couché">
-              <span class="combobox-arrow">▾</span>
-              <div id="new-exercise-dropdown" class="combobox-dropdown"></div>
-            </div>
-          </div>
-
-          <div class="row">
+        <!-- poids corporel -->
+        <div id="mode-poids" hidden>
+          <form id="bw-form" class="inline-form">
             <div class="field">
-              <label for="new-exercise-sets">Séries</label>
-              <input type="number" id="new-exercise-sets" min="1" placeholder="3">
+              <label for="bw-input">Poids du jour (lb)</label>
+              <input type="number" id="bw-input" step="0.1" min="0" inputmode="decimal" required>
             </div>
-            <div class="field">
-              <label for="new-exercise-reps">Reps</label>
-              <input type="text" id="new-exercise-reps" placeholder="8-10">
-            </div>
+            <button type="submit" class="primary compact"><span class="primary-label">Ajouter</span></button>
+          </form>
+          <div id="bw-stats" class="stat-row"></div>
+          <div class="card-surface">
+            <div id="bw-chart" class="chart-host"></div>
           </div>
-
-          <label class="checkbox-row hidden" id="superset-toggle-wrap">
-            <input type="checkbox" id="new-exercise-superset">
-            Superset avec l'exercice précédent
-          </label>
-
-          <div class="form-actions">
-            <button type="button" id="add-exercise-btn">Ajouter à la liste</button>
-            <button type="button" id="cancel-draft-edit-btn" class="secondary-btn hidden">Annuler</button>
-          </div>
+          <div id="bw-list" class="log-list"></div>
         </div>
 
-        <div id="draft-exercise-list" class="draft-list"></div>
-
-        <div class="form-actions">
-          <button type="submit" id="workout-submit-btn">Enregistrer le programme</button>
-          <button type="button" id="workout-cancel-btn" class="secondary-btn hidden">Annuler</button>
+        <!-- photos -->
+        <div id="mode-photos" hidden>
+          <button class="tile-btn" id="add-photo-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Ajouter une photo
+          </button>
+          <input type="file" id="photo-input" accept="image/*" hidden>
+          <div id="photo-grid" class="photo-grid"></div>
         </div>
-      </form>
-    </section>
-
-    <!-- ONGLET: PROGRESSION -->
-    <section id="view-progress" class="view">
-      <div class="segmented" id="progress-mode-toggle">
-        <button type="button" data-mode="chart" class="active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7 15 3.5-3.5 3 3L20 8"/></svg>
-          Exercices
-        </button>
-        <button type="button" data-mode="bodyweight">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M7 21h10"/><path d="M4 8h16"/><path d="m4 8-2 5a3 3 0 0 0 6 0Z"/><path d="m20 8-2 5a3 3 0 0 0 6 0Z"/></svg>
-          Poids
-        </button>
-        <button type="button" data-mode="photos">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z"/><circle cx="12" cy="13" r="3"/></svg>
-          Photos
-        </button>
-      </div>
-
-      <div id="progress-chart-mode">
-        <div class="ex-picker">
-          <label for="progress-exercise-select" class="visually-hidden">Exercice</label>
-          <select id="progress-exercise-select"></select>
-        </div>
-
-        <div class="segmented" id="metric-toggle">
-          <button type="button" data-metric="weight" class="active">Poids</button>
-          <button type="button" data-metric="reps">Reps</button>
-        </div>
-
-        <div id="progress-stats" class="progress-stats"></div>
-        <div id="chart-container"></div>
-      </div>
-
-      <div id="progress-bodyweight-mode" class="hidden">
-        <form id="bodyweight-form" class="bodyweight-form">
-          <div class="field">
-            <label for="bodyweight-input">Poids (lb)</label>
-            <input type="number" id="bodyweight-input" step="0.1" min="0" required>
-          </div>
-          <button type="submit">Ajouter</button>
-        </form>
-        <div id="bodyweight-stats" class="progress-stats"></div>
-        <div id="bodyweight-chart-container"></div>
-        <div id="bodyweight-list" class="bodyweight-list"></div>
-      </div>
-
-      <div id="progress-photo-mode" class="hidden">
-        <button type="button" id="add-photo-btn" class="secondary-btn">+ Ajouter une photo</button>
-        <input type="file" id="photo-upload-input" accept="image/*" class="hidden">
-        <div id="photo-gallery" class="photo-gallery"></div>
       </div>
     </section>
 
-    <!-- ONGLET: RÉGLAGES -->
-    <section id="view-settings" class="view">
-      <div class="settings-card">
-        <h3>Apparence</h3>
-        <label class="switch-row" for="dark-mode-toggle">
-          <span class="switch-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-            Mode sombre
-          </span>
-          <input type="checkbox" id="dark-mode-toggle">
-          <span class="switch"></span>
-        </label>
-        <p class="settings-hint accent-hint">Couleur de l'application</p>
-        <button type="button" id="accent-color-btn" class="secondary-btn btn-with-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2Z"/></svg>
-          Choisir une couleur
-        </button>
-      </div>
+    <!-- ── Réglages ── -->
+    <section class="page" id="page-reglages" data-tab="reglages" hidden>
+      <div class="page-bar"><span class="page-bar-title">Réglages</span></div>
+      <div class="page-scroll">
+        <h1 class="big-title">Réglages</h1>
 
-      <div class="settings-card">
-        <h3>Exercices</h3>
-        <p class="settings-hint">Renomme un exercice (ça se met à jour partout : logs, programmes, progression) ou ajoute une note technique.</p>
-        <button type="button" id="manage-exercises-btn">Gérer mes exercices</button>
-      </div>
+        <div class="card-surface block" id="import-card">
+          <h3>Récupérer mes données</h3>
+          <p class="muted" id="import-scan">Analyse…</p>
+          <button class="primary compact" id="import-old-btn"><span class="primary-label">Importer depuis Mes Workouts</span></button>
+          <p class="fineprint">Copie seulement. L'ancienne app garde tout, elle n'est jamais modifiée.</p>
+        </div>
 
-      <div class="settings-card">
-        <h3>Sauvegarde</h3>
-        <p class="settings-hint">Tes données sont stockées seulement sur ce téléphone. Exporte-les de temps en temps pour ne rien perdre.</p>
-        <button type="button" id="export-btn">Exporter mes données</button>
-        <label class="secondary-btn file-label" for="import-file">Importer une sauvegarde</label>
-        <input type="file" id="import-file" accept="application/json" class="hidden">
+        <div class="card-surface block">
+          <h3>Sauvegarde</h3>
+          <p class="muted">Tes données vivent sur ce téléphone. Exporte-les de temps en temps.</p>
+          <button class="ghost-btn" id="export-btn">Exporter un fichier</button>
+          <label class="ghost-btn" for="import-file">Importer un fichier</label>
+          <input type="file" id="import-file" accept="application/json" hidden>
+        </div>
+
+        <div class="card-surface block">
+          <h3>Exercices</h3>
+          <p class="muted">Renomme un exercice — il se met à jour dans l'historique, les programmes et les records. Ajoute une note technique si tu veux.</p>
+          <button class="ghost-btn" id="manage-ex-btn">Gérer mes exercices</button>
+        </div>
+
+        <div class="card-surface block danger">
+          <h3>Zone rouge</h3>
+          <p class="muted">Efface tout ce que Reps a enregistré sur cet appareil. Sans effet sur l'ancienne app.</p>
+          <button class="ghost-btn danger-btn" id="wipe-btn">Tout effacer</button>
+        </div>
+
+        <p class="fineprint center">Reps — <span id="version-line"></span></p>
       </div>
     </section>
   </main>
 
-  <nav id="bottom-nav">
-    <button class="nav-btn active" data-view="view-workouts">
-      <span class="nav-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M8 11h8M8 15h6"/></svg>
-      </span>
+  <!-- ══ VUE POUSSÉE (détail / éditeur) ══════════════════ -->
+  <section class="pushed" id="pushed" hidden aria-live="polite"></section>
+
+  <!-- ══ BARRE D'ONGLETS ═════════════════════════════════ -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab on" data-tab="programmes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1.2"/><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M8.5 11h7M8.5 15h5"/></svg>
       <span>Programmes</span>
     </button>
-    <button class="nav-btn" data-view="view-log">
-      <span class="nav-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
-      </span>
-      <span>Log</span>
+    <button class="tab" data-tab="historique">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></svg>
+      <span>Historique</span>
     </button>
-    <button class="nav-btn" data-view="view-progress">
-      <span class="nav-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7 15 3.5-3.5 3 3L20 8"/></svg>
-      </span>
-      <span>Progression</span>
+    <button class="tab" data-tab="progres">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-3.5 3 3 5.5-6"/></svg>
+      <span>Progrès</span>
     </button>
-    <button class="nav-btn" data-view="view-settings">
-      <span class="nav-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.1 4.9l-2.1 2.1M7 17l-2.1 2.1M19.1 19.1 17 17M7 7 4.9 4.9"/></svg>
-      </span>
+    <button class="tab" data-tab="reglages">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>
       <span>Réglages</span>
     </button>
   </nav>
 
-  <div id="action-menu" class="action-menu hidden">
-    <button type="button" id="action-menu-note">📝 Note</button>
-    <button type="button" id="action-menu-edit">✎ Modifier</button>
-    <button type="button" id="action-menu-delete">✕ Supprimer</button>
-  </div>
-
-  <div id="accent-color-overlay" class="cover-picker-overlay hidden">
-    <div class="cover-picker-card">
-      <div class="cover-picker-head">
-        <h3>Choisir une couleur</h3>
-        <button type="button" id="accent-color-close">✕</button>
+  <!-- ══ SÉANCE (plein écran) ════════════════════════════ -->
+  <div class="session" id="session" hidden>
+    <header class="chrome-top" id="chrome-top">
+      <button class="icon-btn" id="quit" aria-label="Quitter la séance">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="head-mid">
+        <p class="head-title" id="program-name">Séance</p>
+        <p class="head-sub"><span id="clock" class="tnum">0:00</span><span class="dot-sep"></span><span id="head-count">1 sur 1</span></p>
       </div>
-      <div id="accent-color-grid" class="accent-color-grid"></div>
+      <span class="icon-btn ghost-slot" aria-hidden="true"></span>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    </header>
+
+    <div class="pr-banner" id="pr-banner" role="status" aria-live="polite">
+      <span class="pr-medal" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M8 3h8l-1.5 5.5"/><path d="M9.5 8.5 8 3"/><circle cx="12" cy="15" r="6"/><path d="m12 12.4 1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2L8.8 14.7l2.2-.3z"/></svg>
+      </span>
+      <span class="pr-text"><strong>Record personnel</strong><em id="pr-detail"></em></span>
     </div>
-  </div>
 
-  <div id="note-exercise-picker-overlay" class="cover-picker-overlay hidden">
-    <div class="cover-picker-card">
-      <div class="cover-picker-head">
-        <h3>Choisir un exercice</h3>
-        <button type="button" id="note-exercise-picker-close">✕</button>
-      </div>
-      <div id="note-exercise-picker-list" class="exercise-manager-list"></div>
+    <main class="stack" id="stack" aria-label="Exercices de la séance"></main>
+
+    <footer class="chrome-bottom">
+      <div class="dots" id="dots"></div>
+      <button class="primary" id="commit">
+        <span class="primary-fill" id="primary-fill"></span>
+        <span class="primary-label" id="commit-label">Valider la série 1</span>
+      </button>
+    </footer>
+
+    <div class="hint" id="hint" hidden>
+      <div class="hint-row"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16"/><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/></svg><span>Glisse la carte pour changer d'exercice</span></div>
+      <div class="hint-row"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4"/><path d="m8 8 4-4 4 4"/></svg><span>Tire un chiffre vers le haut pour l'ajuster</span></div>
     </div>
-  </div>
 
-  <div id="note-editor-overlay" class="cover-picker-overlay hidden">
-    <div class="cover-picker-card">
-      <div class="cover-picker-head">
-        <h3 id="note-editor-title">Note</h3>
-        <button type="button" id="note-editor-close">✕</button>
-      </div>
-      <textarea id="note-editor-input" class="note-editor-textarea" rows="3" placeholder="Note (ex: grip large, attention à l'épaule)"></textarea>
-      <div class="form-actions">
-        <button type="button" id="note-editor-save">Enregistrer</button>
-        <button type="button" id="note-editor-cancel" class="secondary-btn">Annuler</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="guided-overlay" class="guided-overlay hidden">
-    <div class="guided-card">
-      <div id="guided-step">
-        <img id="guided-cover" class="guided-cover hidden" alt="">
-        <div class="guided-progress" id="guided-progress"></div>
-        <div class="guided-exercise">
-          <span class="superset-badge hidden" id="guided-superset-badge"></span>
-          <h2 id="guided-exercise-name"></h2>
-          <p id="guided-exercise-target" class="guided-target"></p>
+    <div class="scrim" id="sc-scrim" hidden></div>
+    <section class="sheet" id="sc-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+      <div class="grabber" aria-hidden="true"></div>
+      <div class="sheet-scroll">
+        <p class="sheet-kicker">Séance terminée</p>
+        <h2 class="sheet-title" id="sheet-title">Séance</h2>
+        <div class="stat-row">
+          <div class="stat"><span class="stat-val tnum" id="stat-time">0:00</span><span class="stat-key">Durée</span></div>
+          <div class="stat"><span class="stat-val tnum" id="stat-volume">0</span><span class="stat-key">Volume (lb)</span></div>
+          <div class="stat"><span class="stat-val tnum" id="stat-sets">0</span><span class="stat-key">Séries</span></div>
         </div>
-
-        <form id="guided-form">
-          <div class="row" id="guided-single-fields">
-            <div class="field">
-              <label for="guided-weight">Poids (lb)</label>
-              <input type="number" id="guided-weight" step="0.5" min="0" required>
-            </div>
-            <div class="field">
-              <label for="guided-sets">Séries</label>
-              <input type="number" id="guided-sets" min="1" required>
-            </div>
-            <div class="field">
-              <label for="guided-reps">Reps</label>
-              <input type="number" id="guided-reps" min="1" required>
-            </div>
-          </div>
-
-          <label class="checkbox-row" id="guided-per-set-wrap">
-            <input type="checkbox" id="guided-per-set-toggle">
-            Poids différents par série
-          </label>
-          <div id="guided-per-set-list" class="per-set-list hidden"></div>
-
-          <button type="submit">Logger et continuer</button>
-        </form>
-
-        <div class="guided-nav-row">
-          <button type="button" id="guided-back" class="secondary-btn">◀ Précédent</button>
-          <button type="button" id="guided-skip" class="secondary-btn">Passer ▶</button>
+        <div class="sheet-block" id="pr-block" hidden>
+          <p class="block-key">Records battus</p>
+          <ul class="pr-list" id="pr-list"></ul>
         </div>
-        <button type="button" id="guided-quit" class="secondary-btn guided-quit-btn">Terminer la séance</button>
+        <div class="sheet-block">
+          <p class="block-key">Constance</p>
+          <div class="streak-head"><span class="streak-num" id="streak-num">0</span><span class="streak-lbl">semaines<br>d'affilée</span></div>
+          <div class="cal" id="cal" aria-hidden="true"></div>
+          <p class="cal-legend"><span class="cal-swatch"></span> jours d'entraînement · 5 dernières semaines</p>
+        </div>
+        <button class="primary sheet-cta" id="sheet-close"><span class="primary-label">Terminé</span></button>
       </div>
-
-      <div id="guided-done" class="hidden">
-        <h2>Séance terminée ! 🎉</h2>
-        <p id="guided-done-summary"></p>
-        <button type="button" id="guided-close">Retour</button>
-      </div>
-    </div>
+    </section>
   </div>
 
-  <div id="exercise-manager-overlay" class="cover-picker-overlay hidden">
-    <div class="cover-picker-card">
-      <div class="cover-picker-head">
-        <h3>Gérer mes exercices</h3>
-        <button type="button" id="exercise-manager-close">✕</button>
-      </div>
-      <div id="exercise-manager-list" class="exercise-manager-list"></div>
-    </div>
+  <!-- ══ FEUILLE GÉNÉRIQUE ═══════════════════════════════ -->
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="sheet modal-sheet" id="sheet" role="dialog" aria-modal="true" hidden>
+    <div class="grabber" aria-hidden="true"></div>
+    <div class="sheet-scroll" id="sheet-body"></div>
+  </section>
+
+  <!-- ══ VISIONNEUSE PHOTO ═══════════════════════════════ -->
+  <div class="lightbox" id="lightbox" hidden>
+    <img id="lightbox-img" alt="Photo de progression">
+    <button class="icon-btn lightbox-close" id="lightbox-close" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
   </div>
 
-  <div id="cover-picker-overlay" class="cover-picker-overlay hidden">
-    <div class="cover-picker-card">
-      <div class="cover-picker-head">
-        <h3>Choisir une couverture</h3>
-        <button type="button" id="cover-picker-close">✕</button>
-      </div>
-      <div id="cover-preset-grid" class="cover-preset-grid"></div>
-      <button type="button" id="cover-upload-btn" class="secondary-btn">📁 Choisir depuis mes photos</button>
-    </div>
-  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
 
-  <div id="photo-lightbox" class="photo-lightbox hidden">
-    <img id="photo-lightbox-img" src="" alt="Photo de progression">
-    <button type="button" id="photo-lightbox-close">✕</button>
-  </div>
-
-  <div id="toast" class="toast hidden"></div>
-
-  <script src="app.js?v=14"></script>
+<script src="js/motion.js?v=2"></script>
+<script src="js/data.js?v=2"></script>
+<script src="js/chart.js?v=2"></script>
+<script src="js/session.js?v=2"></script>
+<script src="js/views.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
+<script>
+  /* En local on ne l'enregistre pas : il resservirait l'ancienne
+     version depuis son cache à chaque rechargement pendant le dev. */
+  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+  if ("serviceWorker" in navigator && !local) {
+    addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  } else if (local && "serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+    if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+  }
+</script>
 </body>
 </html>
