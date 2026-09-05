@@ -63,8 +63,12 @@
   --r-xl: 30px; --r-lg: 22px; --r-md: 15px; --r-sm: 10px;
   --blur: 24px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  /* La barre d'onglets descend plus près de l'indicateur d'accueil :
+     la marge de sécurité complète la faisait flotter trop haut et
+     mangeait une ligne de contenu. */
+  --safe-tab: calc(var(--safe-b) * .62);
   --safe-t: env(safe-area-inset-top, 0px);
-  --tabbar-h: 62px;
+  --tabbar-h: 52px;
 }
 
 /* ── Thème clair ──────────────────────────────────────────────
@@ -201,7 +205,7 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--safe-t) + 14px) 20px calc(var(--tabbar-h) + var(--safe-b) + 26px);
+  padding: calc(var(--safe-t) + 14px) 20px calc(var(--tabbar-h) + var(--safe-tab) + 24px);
 }
 .page-scroll::-webkit-scrollbar { width: 0; }
 
@@ -335,8 +339,8 @@ body {
   position: absolute;
   z-index: 40;
   left: 0; right: 0; bottom: 0;
-  height: calc(var(--tabbar-h) + var(--safe-b));
-  padding-bottom: var(--safe-b);
+  height: calc(var(--tabbar-h) + var(--safe-tab));
+  padding-bottom: var(--safe-tab);
   display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--bar);
   backdrop-filter: blur(var(--blur)) saturate(180%);
@@ -344,14 +348,14 @@ body {
   border-top: 1px solid var(--hair);
 }
 .tab {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   border: none; background: none; cursor: pointer;
   color: var(--tx-3);
   font: inherit; font-size: .625rem; letter-spacing: .015em; font-weight: 550;
   padding: 0;
   transition: color 120ms ease-out;
 }
-.tab svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; will-change: transform; }
+.tab svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; will-change: transform; }
 .tab.on { color: var(--accent-tx); }
 body.in-session .tabbar { opacity: 0; pointer-events: none; }
 
@@ -717,7 +721,7 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .toast {
   position: absolute;
   z-index: 90;
-  left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-b) + 18px);
+  left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-tab) + 18px);
   transform: translate3d(-50%,22px,0);
   max-width: 84%;
   padding: 12px 18px;
