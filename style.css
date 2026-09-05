@@ -63,12 +63,10 @@
   --r-xl: 30px; --r-lg: 22px; --r-md: 15px; --r-sm: 10px;
   --blur: 24px;
   --safe-b: env(safe-area-inset-bottom, 0px);
-  /* La barre d'onglets ne réserve plus rien pour la marge de
-     sécurité : elle s'assoit au bord de l'écran. Sur iPhone les
-     libellés arrivent donc dans la bande de l'indicateur
-     d'accueil — c'est assumé, la barre gagne 20 px de moins sur
-     le contenu. */
-  --safe-tab: 0px;
+  /* Réservé sous la barre d'onglets. Pas la marge de sécurité
+     complète : juste de quoi décoller les libellés du bord, sans
+     rendre au système les 34 px qu'il demande. */
+  --safe-tab: 5px;
   --safe-t: env(safe-area-inset-top, 0px);
   --tabbar-h: 43px;
 }
