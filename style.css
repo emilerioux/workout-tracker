@@ -63,12 +63,14 @@
   --r-xl: 30px; --r-lg: 22px; --r-md: 15px; --r-sm: 10px;
   --blur: 24px;
   --safe-b: env(safe-area-inset-bottom, 0px);
-  /* La barre d'onglets descend plus près de l'indicateur d'accueil :
-     la marge de sécurité complète la faisait flotter trop haut et
-     mangeait une ligne de contenu. */
-  --safe-tab: calc(var(--safe-b) * .62);
+  /* La barre d'onglets s'appuie contre l'indicateur d'accueil au
+     lieu de planer au-dessus. Le plancher, c'est lui : sur iPhone
+     il occupe la bande des ~13 derniers pixels, et les libellés
+     s'arrêtent juste dessus. Descendre plus les ferait passer
+     dessous. */
+  --safe-tab: calc(var(--safe-b) * .38);
   --safe-t: env(safe-area-inset-top, 0px);
-  --tabbar-h: 52px;
+  --tabbar-h: 50px;
 }
 
 /* ── Thème clair ──────────────────────────────────────────────
