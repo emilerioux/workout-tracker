@@ -19,6 +19,54 @@ const ACCENTS = [
 ];
 const accentOf = (p) => ACCENTS[(p.accent ?? 0) % ACCENTS.length];
 
+/* Le dégradé d'un programme, prêt à poser dans un style. */
+const stripeOf = (p) => { const [a, b] = accentOf(p); return `linear-gradient(160deg,${a},${b})`; };
+
+/* Un programme = une couleur à lui. On prend la première libre ;
+   au-delà de dix programmes il faut bien recommencer, et c'est
+   alors la couleur la moins portée qui repasse. */
+function freeAccent(taken) {
+  for (let i = 0; i < ACCENTS.length; i++) if (!taken.has(i)) return i;
+  const count = new Map();
+  DB.programs.forEach((p) => count.set(p.accent ?? 0, (count.get(p.accent ?? 0) || 0) + 1));
+  let best = 0, low = Infinity;
+  for (let i = 0; i < ACCENTS.length; i++) {
+    const n = count.get(i) || 0;
+    if (n < low) { low = n; best = i; }
+  }
+  return best;
+}
+const nextAccent = () => freeAccent(new Set(DB.programs.map((p) => p.accent ?? 0)));
+
+/* Les programmes venus de l'ancienne app se partageaient six
+   couleurs en boucle : deux pouvaient tomber sur la même. Une
+   redistribution, UNE SEULE FOIS — la relancer à chaque démarrage
+   défferait un choix de couleur volontairement en double. */
+function normalizeAccents() {
+  if (localStorage.getItem(K.accentFix)) return;
+  try { localStorage.setItem(K.accentFix, "1"); } catch (_) {}
+  const seen = new Set();
+  let changed = false;
+  DB.programs.forEach((p) => {
+    let a = p.accent ?? 0;
+    if (!Number.isInteger(a) || a < 0 || a >= ACCENTS.length || seen.has(a)) {
+      a = freeAccent(seen);
+      p.accent = a;
+      changed = true;
+    }
+    seen.add(a);
+  });
+  if (changed) persist.programs();
+}
+
+/* La couleur d'une entrée d'historique vient de son programme.
+   Une entrée manuelle, ou dont le programme a été supprimé, garde
+   un filet neutre : l'alignement des lignes ne bouge pas. */
+function logStripe(log) {
+  const p = log.programId ? DB.programs.find((x) => x.id === log.programId) : null;
+  return p ? stripeOf(p) : "var(--line)";
+}
+
 /* ── Toast ────────────────────────────────────────────────── */
 let toastTimer = 0;
 const toastS = new Spring(0, { response: 0.4, damping: 0.82, restDelta: 0.004, onUpdate: (v) => {
@@ -227,11 +275,10 @@ function renderPrograms() {
   }
 
   host.innerHTML = DB.programs.map((p) => {
-    const [c1, c2] = accentOf(p);
     const last = DB.logs.filter((l) => l.programId === p.id).sort((a, b) => b.createdAt - a.createdAt)[0];
     const when = last ? relDay(last.date) : "jamais faite";
     return `<button type="button" class="prog-card" data-id="${esc(p.id)}">
-        <span class="prog-stripe" style="background:linear-gradient(160deg,${c1},${c2})"></span>
+        <span class="prog-stripe" style="background:${stripeOf(p)}"></span>
         <span class="prog-body">
           <span class="prog-name">${esc(p.name)}</span>
           <span class="prog-meta">${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""} · ${esc(when)}</span>
@@ -264,6 +311,7 @@ function showProgram(id) {
   const p = DB.programs.find((x) => x.id === id);
   if (!p) return;
   const [c1, c2] = accentOf(p);
+  const stripe = stripeOf(p);
   const badges = supersetLabels(p.exercises);
 
   pushView(
@@ -284,6 +332,7 @@ function showProgram(id) {
        <ol class="ex-list">
          ${p.exercises.map((e, i) => `
            <li class="ex-row${badges[i].superset ? " ss" : ""}">
+             <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
              <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
              <span class="ex-main">
                <span class="ex-title">${esc(e.name)}</span>
@@ -317,7 +366,11 @@ function showProgram(id) {
 function editProgram(existing) {
   const draft = existing
     ? { id: existing.id, name: existing.name, accent: existing.accent ?? 0, exercises: existing.exercises.map((e) => ({ ...e })) }
-    : { id: uid(), name: "", accent: DB.programs.length % ACCENTS.length, exercises: [] };
+    : { id: uid(), name: "", accent: nextAccent(), exercises: [] };
+
+  /* Les couleurs portées par les AUTRES programmes s'affichent en
+     retrait : rien n'empêche de les reprendre, mais on le voit. */
+  const taken = new Set(DB.programs.filter((p) => p.id !== draft.id).map((p) => p.accent ?? 0));
 
   pushView(
     `<header class="pushed-bar">
@@ -334,8 +387,9 @@ function editProgram(existing) {
        </div>
        <p class="block-key">Couleur</p>
        <div class="accent-row" id="accent-row">
-         ${ACCENTS.map((c, i) => `<button type="button" class="accent${i === draft.accent ? " on" : ""}" data-i="${i}"
-            style="background:linear-gradient(160deg,${c[0]},${c[1]})" aria-label="Couleur ${i + 1}"></button>`).join("")}
+         ${ACCENTS.map((c, i) => `<button type="button" class="accent${i === draft.accent ? " on" : ""}${taken.has(i) ? " used" : ""}" data-i="${i}"
+            style="background:linear-gradient(160deg,${c[0]},${c[1]})"
+            aria-label="Couleur ${i + 1}${taken.has(i) ? " — déjà prise par un autre programme" : ""}"></button>`).join("")}
        </div>
        <p class="block-key">Exercices</p>
        <p class="fineprint" style="margin:-4px 0 10px">Glisse la poignée à droite pour changer l'ordre.</p>
@@ -360,6 +414,7 @@ function editProgram(existing) {
           <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13"/></svg>
         </button>
         <div class="swipe-surface draft-row">
+          <span class="row-stripe" style="background:${stripeOf(draft)}" aria-hidden="true"></span>
           <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
           <span class="ex-main">
             <span class="ex-title">${esc(e.name)}</span>
@@ -404,6 +459,7 @@ function editProgram(existing) {
     if (!b) return;
     draft.accent = Number(b.dataset.i);
     $("accent-row").querySelectorAll(".accent").forEach((x) => x.classList.toggle("on", x === b));
+    $("draft-list").querySelectorAll(".row-stripe").forEach((x) => { x.style.background = stripeOf(draft); });
     pop(b, 1.14, 0.5);
     buzz(6);
   });
@@ -671,6 +727,7 @@ function renderHistory() {
             <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13"/></svg>
           </button>
           <div class="swipe-surface log-row">
+            <span class="row-stripe" style="background:${logStripe(l)}" aria-hidden="true"></span>
             <span class="log-main">
               <span class="log-name">${esc(l.exercise)}</span>
               <span class="log-detail tnum">${esc(detail)}</span>

@@ -342,6 +342,11 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
 }
 .prog-card.pressed { transform: scale(.978); background: var(--glass-2); }
 .prog-stripe { flex: none; width: 6px; align-self: stretch; min-height: 74px; }
+
+/* Le même filet, en plus fin, pour une ligne d'historique ou un
+   exercice : c'est ce qui relie une entrée à son programme sans
+   ajouter un mot de plus. */
+.row-stripe { flex: none; width: 5px; align-self: stretch; }
 .prog-body { flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 16px 0; min-width: 0; }
 .prog-name { font-size: 1.0625rem; font-weight: 600; letter-spacing: -.015em; }
 .prog-meta { font-size: .8125rem; color: var(--tx-2); }
@@ -386,11 +391,14 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
 .ex-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ex-row, .draft-row {
   display: flex; align-items: center; gap: 13px;
-  padding: 14px;
+  padding: 0 14px 0 0;
   border-radius: var(--r-md);
   background: var(--glass);
   border: 1px solid transparent;
+  overflow: hidden;          /* le filet suit l'arrondi */
 }
+.ex-row > .ex-num, .draft-row > .ex-num { margin-left: 14px; }
+.ex-row > .row-stripe + .ex-num, .draft-row > .row-stripe + .ex-num { margin-left: 0; }
 .ex-row.ss { border-color: rgba(10,132,255,.28); background: rgba(10,132,255,.07); }
 .ex-num {
   flex: none; width: 24px; text-align: center;
@@ -398,7 +406,7 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
   font-variant-numeric: tabular-nums;
 }
 .ex-row.ss .ex-num b { color: var(--blue-tx); }
-.ex-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ex-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 0; }
 .ex-title { font-size: .9375rem; font-weight: 550; }
 .ex-sub { font-size: .75rem; color: var(--tx-2); }
 .ex-best { font-size: .875rem; font-weight: 600; color: var(--tx-2); font-variant-numeric: tabular-nums; }
@@ -433,8 +441,8 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
 .day-name { font-size: .8125rem; font-weight: 650; letter-spacing: .01em; color: var(--tx-2); }
 .day-vol { font-size: .75rem; color: var(--tx-3); }
 
-.log-row { display: flex; align-items: center; gap: 12px; padding: 14px; }
-.log-main { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.log-row { display: flex; align-items: center; gap: 12px; padding: 0 14px 0 0; }
+.log-main { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 14px 0; }
 .log-name { font-size: .9375rem; font-weight: 550; }
 .log-detail { font-size: .8125rem; color: var(--tx-2); }
 .log-tag {
@@ -630,6 +638,10 @@ textarea.input { resize: vertical; line-height: 1.45; }
   will-change: transform;
 }
 .accent.on { outline: 2px solid var(--tx); outline-offset: 3px; }
+/* Couleur déjà portée par un autre programme : en retrait, pas
+   interdite. */
+.accent.used { opacity: .34; }
+.accent.used.on { opacity: 1; }
 
 /* Poignée de réordonnancement — point de saisie séparé du glissé
    horizontal : vertical pour l'ordre, horizontal pour supprimer. */

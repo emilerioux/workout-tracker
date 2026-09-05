@@ -229,6 +229,7 @@ function initApp() {
 }
 
 /* ── Démarrage ────────────────────────────────────────────── */
+normalizeAccents();
 initApp();
 refreshAll();
 switchTab(TABS.includes(sessionStorage.getItem(K.tab)) ? sessionStorage.getItem(K.tab) : "programmes", { instant: true });

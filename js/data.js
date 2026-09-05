@@ -14,6 +14,7 @@ const K = {
   prs:       "wt2-prs",
   sessions:  "wt2-sessions",
   hint:      "wt2-hint-seen",
+  accentFix: "wt2-accents-v1",
   tab:       "wt2-tab",
 };
 
