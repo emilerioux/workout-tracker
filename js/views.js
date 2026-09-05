@@ -102,13 +102,32 @@ const sheetY2 = new Spring(0, { response: 0.42, damping: 0.85, restDelta: 0.4, o
   }
 } });
 
+/* La hauteur sert à trois choses : la position fermée, l'échelle et
+   l'opacité du voile, et le seuil du glissé. Elle se relit dès que
+   le contenu change de taille. */
+function measureSheet() {
+  sheetH2 = $("sheet").offsetHeight || 1;
+  return sheetH2;
+}
+
 function openSheet(html, opts = {}) {
+  const sh = $("sheet");
   $("sheet-body").innerHTML = html;
-  $("sheet").hidden = false; $("scrim").hidden = false; closingSheet2 = false;
+
+  /* Repoussée hors écran AVANT d'être affichée, et en pourcentage :
+     sa hauteur n'est pas encore connue. Sans ça elle apparaissait
+     une image à la position laissée par la feuille précédente — une
+     feuille plus haute que la précédente montrait son haut avant de
+     redescendre. C'est le sursaut qu'on voyait en changeant
+     d'exercice. */
+  sh.style.transform = "translate3d(0,100%,0) scale(.97)";
+  $("scrim").style.opacity = "0";
+
+  sh.hidden = false; $("scrim").hidden = false; closingSheet2 = false;
   onSheetClose = opts.onClose || null;
+
   requestAnimationFrame(() => {
-    sheetH2 = $("sheet").offsetHeight || 1;
-    sheetY2.hold(sheetH2);
+    sheetY2.hold(measureSheet());
     sheetY2.to(0, { velocity: 0, damping: 0.82, response: 0.46 });
     if (opts.focus) { const f = $("sheet-body").querySelector(opts.focus); if (f) f.focus(); }
   });
@@ -226,9 +245,11 @@ function pickExercise(current, onPick) {
   openSheet(
     `<h2 class="sheet-h">Exercice</h2>
      <input type="search" class="input search" id="ex-search" placeholder="Chercher ou créer…" autocomplete="off">
-     <div class="pick-list" id="ex-pick-list"></div>`,
-    { focus: "#ex-search" }
+     <div class="pick-list" id="ex-pick-list"></div>`
   );
+  /* Pas d'autofocus : le clavier iOS montait pendant que la feuille
+     arrivait, deux mouvements en même temps, et il recouvrait la
+     liste — qui est justement ce qu'on vient voir. */
   const list = $("ex-pick-list"), search = $("ex-search");
   const draw = () => {
     const q = search.value.trim().toLowerCase();
@@ -245,7 +266,7 @@ function pickExercise(current, onPick) {
       (!hits.length && !search.value.trim() ? `<p class="muted pad">Aucun exercice pour l'instant. Tape un nom pour en créer un.</p>` : "");
   };
   draw();
-  search.addEventListener("input", draw);
+  search.addEventListener("input", () => { draw(); measureSheet(); });
   list.addEventListener("click", (e) => {
     const b = e.target.closest("[data-name]");
     if (!b) return;
