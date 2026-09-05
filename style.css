@@ -577,6 +577,14 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .inline-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-bottom: 16px; }
 .inline-form .field { margin-bottom: 0; }
 .inline-form .primary { width: auto; padding: 0 20px; }
+/* Le poids du jour se tape debout, une main sur la barre : la
+   cible est plus haute que les autres champs, et le bouton suit. */
+.inline-form .input { height: 54px; padding: 0 16px; font-size: 1.125rem; font-weight: 550; font-variant-numeric: tabular-nums; }
+.inline-form .primary.compact { height: 54px; }
+/* Les flèches natives du champ nombre volent la moitié de la
+   largeur sur desktop. */
+.input[type="number"]::-webkit-inner-spin-button,
+.input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 .check-row {
   display: flex; align-items: center; gap: 10px;

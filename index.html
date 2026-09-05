@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reps">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -110,7 +110,7 @@
           <form id="bw-form" class="inline-form">
             <div class="field">
               <label for="bw-input">Poids du jour (lb)</label>
-              <input type="number" id="bw-input" step="0.1" min="0" inputmode="decimal" required>
+              <input class="input" type="number" id="bw-input" step="0.1" min="0" inputmode="decimal" placeholder="0.0" required>
             </div>
             <button type="submit" class="primary compact"><span class="primary-label">Ajouter</span></button>
           </form>
@@ -286,13 +286,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=6"></script>
-<script src="js/motion.js?v=6"></script>
-<script src="js/data.js?v=6"></script>
-<script src="js/chart.js?v=6"></script>
-<script src="js/session.js?v=6"></script>
-<script src="js/views.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/theme.js?v=7"></script>
+<script src="js/motion.js?v=7"></script>
+<script src="js/data.js?v=7"></script>
+<script src="js/chart.js?v=7"></script>
+<script src="js/session.js?v=7"></script>
+<script src="js/views.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */
