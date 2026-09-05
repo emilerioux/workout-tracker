@@ -271,7 +271,7 @@ function exportJSON() {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `reps-${today()}.json`;
+  a.download = `workouts-${today()}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
@@ -293,7 +293,10 @@ function importJSON(file, done) {
   r.readAsText(file);
 }
 
-/* ── Photos de progression (IndexedDB, base propre à Reps) ── */
+/* ── Photos de progression (IndexedDB, base à part) ────────
+   Le nom « reps-photos » date du nom d'origine de l'app et ne
+   change pas : renommer la base orphelinerait les photos déjà
+   enregistrées sur l'appareil. */
 const PHOTO_DB = "reps-photos", PHOTO_STORE = "photos";
 function photoDB() {
   return new Promise((res, rej) => {

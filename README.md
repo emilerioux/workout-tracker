@@ -1,4 +1,4 @@
-# Reps
+# Workouts
 
 Suivi d'entraînement en musculation. PWA, hors ligne, données locales.
 
@@ -11,9 +11,14 @@ Suivi d'entraînement en musculation. PWA, hors ligne, données locales.
 Même origine, donc **mêmes données** des deux côtés. Le dépôt `reps` est la
 source ; `workout-tracker` en reçoit une copie à chaque déploiement.
 
-Reps remplace *Mes Workouts*. Le code de l'ancienne app vit dans l'historique
+L'app s'est appelée **Reps** jusqu'en septembre 2026. Les dépôts, les
+adresses et la base de photos (`reps-photos`) gardent ce nom : le
+renommer casserait l'icône déjà posée sur l'écran d'accueil et
+orphelinerait les photos. Seul le nom affiché change.
+
+Cette app remplace *Mes Workouts*. Le code de l'ancienne vit dans l'historique
 Git du dépôt `workout-tracker` (commit `02a5b00`), et ses données sont toujours
-dans le navigateur. Reps ne les lit que sur demande explicite, depuis
+dans le navigateur. On ne les lit que sur demande explicite, depuis
 Réglages → *Ancienne app* → *Récupérer mes données* — et c'est une copie, jamais
 un déplacement. L'option est en bas des réglages, derrière un bouton : elle ne
 sert qu'une fois.

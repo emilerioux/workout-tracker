@@ -1,7 +1,7 @@
 {
-  "name": "Reps",
-  "short_name": "Reps",
-  "description": "Séance guidée — prototype v2 de Mes Workouts",
+  "name": "Workouts",
+  "short_name": "Workouts",
+  "description": "Suivi d'entraînement en musculation, hors ligne.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

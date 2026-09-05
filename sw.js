@@ -1,27 +1,27 @@
-/* Reps — service worker.
+/* Workouts — service worker.
 
-   Le nom du cache inclut le chemin de déploiement : Reps tourne à la
+   Le nom du cache inclut le chemin de déploiement : l'app tourne à la
    fois sur /reps/ et sur /workout-tracker/ (l'ancienne adresse), et les
    deux partagent la même origine. Sans ça, l'activation de l'un
    effacerait le cache de l'autre.
 
    Bumper la VERSION à CHAQUE déploiement, sinon le téléphone continue
    de servir la version précédente. */
-const VERSION = "v19";
+const VERSION = "v20";
 const SCOPE = new URL("./", self.location).pathname;   // ex. "/reps/"
-const CACHE_NAME = `reps-${VERSION}${SCOPE}`;
+const CACHE_NAME = `workouts-${VERSION}${SCOPE}`;
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css?v=17",
-  "./js/theme.js?v=17",
-  "./js/motion.js?v=17",
-  "./js/data.js?v=17",
-  "./js/chart.js?v=17",
-  "./js/session.js?v=17",
-  "./js/views.js?v=17",
-  "./js/app.js?v=17",
+  "./style.css?v=18",
+  "./js/theme.js?v=18",
+  "./js/motion.js?v=18",
+  "./js/data.js?v=18",
+  "./js/chart.js?v=18",
+  "./js/session.js?v=18",
+  "./js/views.js?v=18",
+  "./js/app.js?v=18",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

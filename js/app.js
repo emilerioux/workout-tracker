@@ -196,7 +196,7 @@ function initApp() {
   });
   $("manage-ex-btn").addEventListener("click", manageExercisesSheet);
   $("wipe-btn").addEventListener("click", () => {
-    confirmSheet("Tout effacer ?", "Programmes, historique, pesées et records de Reps seront supprimés de cet appareil. Ton ancienne app n'est pas touchée.", "Tout effacer", () => {
+    confirmSheet("Tout effacer ?", "Programmes, historique, pesées et records seront supprimés de cet appareil. Ton ancienne app n'est pas touchée.", "Tout effacer", () => {
       Object.values(K).forEach((k) => localStorage.removeItem(k));
       location.reload();
     });
