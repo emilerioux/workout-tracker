@@ -7,21 +7,21 @@
 
    Bumper la VERSION à CHAQUE déploiement, sinon le téléphone continue
    de servir la version précédente. */
-const VERSION = "v9";
+const VERSION = "v10";
 const SCOPE = new URL("./", self.location).pathname;   // ex. "/reps/"
 const CACHE_NAME = `reps-${VERSION}${SCOPE}`;
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css?v=7",
-  "./js/theme.js?v=7",
-  "./js/motion.js?v=7",
-  "./js/data.js?v=7",
-  "./js/chart.js?v=7",
-  "./js/session.js?v=7",
-  "./js/views.js?v=7",
-  "./js/app.js?v=7",
+  "./style.css?v=8",
+  "./js/theme.js?v=8",
+  "./js/motion.js?v=8",
+  "./js/data.js?v=8",
+  "./js/chart.js?v=8",
+  "./js/session.js?v=8",
+  "./js/views.js?v=8",
+  "./js/app.js?v=8",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -47,7 +47,31 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+/* La coquille passe par le RÉSEAU d'abord, le reste par le cache.
+
+   Sans ça, index.html sortait du cache à chaque lancement : le
+   nouveau service worker s'installait bien, mais la page affichée
+   restait l'ancienne, et il fallait rouvrir l'app deux ou trois
+   fois pour voir un changement. Les scripts et la CSS gardent le
+   cache d'abord : ils sont versionnés par ?v=N, donc une nouvelle
+   coquille demande de nouvelles URL, qui manquent au cache et
+   partent au réseau toutes seules. Hors ligne, on retombe sur la
+   copie en cache. */
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(e.request, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(e.request).then((hit) => hit || caches.match("./")))
+    );
+    return;
+  }
+
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
 });

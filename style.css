@@ -122,6 +122,19 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* iOS agrandit toute la page dès qu'on touche un champ dont le
+   texte fait moins de 16 px, et ne redescend jamais tout seul.
+   Aucun champ ne passe sous cette limite, quel que soit le
+   réglage de taille de texte du système. */
+:where(input:not([type="checkbox"]):not([type="file"]), textarea, select) {
+  font-size: max(1rem, 16px);   /* :where() = zéro spécificité : un
+                                   champ qui veut plus gros l'emporte */
+}
+
+/* Coupe le zoom du double-tap sans toucher au pincement, qui
+   reste disponible pour qui en a besoin. */
+.app { touch-action: manipulation; }
+
 /* `hidden` doit l'emporter sur tout `display` déclaré plus bas —
    sinon un élément en display:flex reste affiché une fois caché. */
 [hidden] { display: none !important; }

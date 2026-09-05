@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reps">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -286,19 +286,35 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=7"></script>
-<script src="js/motion.js?v=7"></script>
-<script src="js/data.js?v=7"></script>
-<script src="js/chart.js?v=7"></script>
-<script src="js/session.js?v=7"></script>
-<script src="js/views.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/theme.js?v=8"></script>
+<script src="js/motion.js?v=8"></script>
+<script src="js/data.js?v=8"></script>
+<script src="js/chart.js?v=8"></script>
+<script src="js/session.js?v=8"></script>
+<script src="js/views.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */
   const local = ["localhost", "127.0.0.1"].includes(location.hostname);
   if ("serviceWorker" in navigator && !local) {
-    addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    /* Y avait-il déjà un service worker AVANT ce chargement ? Si
+       oui, un changement de contrôleur veut dire « nouvelle
+       version installée » et on recharge une fois pour l'afficher.
+       À la toute première visite il n'y en avait pas : ce même
+       événement se déclenche aussi, et recharger serait gratuit. */
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+    addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js")
+        .then((reg) => reg.update().catch(() => {}))
+        .catch(() => {});
+    });
   } else if (local && "serviceWorker" in navigator) {
     navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
     if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
