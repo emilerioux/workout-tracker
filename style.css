@@ -63,14 +63,14 @@
   --r-xl: 30px; --r-lg: 22px; --r-md: 15px; --r-sm: 10px;
   --blur: 24px;
   --safe-b: env(safe-area-inset-bottom, 0px);
-  /* La barre d'onglets s'appuie contre l'indicateur d'accueil au
-     lieu de planer au-dessus. Le plancher, c'est lui : sur iPhone
-     il occupe la bande des ~13 derniers pixels, et les libellés
-     s'arrêtent juste dessus. Descendre plus les ferait passer
-     dessous. */
-  --safe-tab: calc(var(--safe-b) * .38);
+  /* La barre d'onglets ne réserve plus rien pour la marge de
+     sécurité : elle s'assoit au bord de l'écran. Sur iPhone les
+     libellés arrivent donc dans la bande de l'indicateur
+     d'accueil — c'est assumé, la barre gagne 20 px de moins sur
+     le contenu. */
+  --safe-tab: 0px;
   --safe-t: env(safe-area-inset-top, 0px);
-  --tabbar-h: 50px;
+  --tabbar-h: 43px;
 }
 
 /* ── Thème clair ──────────────────────────────────────────────
@@ -357,7 +357,7 @@ body {
   padding: 0;
   transition: color 120ms ease-out;
 }
-.tab svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; will-change: transform; }
+.tab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; will-change: transform; }
 .tab.on { color: var(--accent-tx); }
 body.in-session .tabbar { opacity: 0; pointer-events: none; }
 
