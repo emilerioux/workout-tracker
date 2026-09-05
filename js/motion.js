@@ -122,7 +122,8 @@ function swipeToReveal(el, { width = 88, onCommit }) {
   el.addEventListener("pointerdown", (e) => {
     /* La poignée de réordonnancement joue en vertical : elle ne
        doit jamais armer le glissé horizontal. */
-    if (e.target.closest(".swipe-action") || e.target.closest(".drag-handle")) return;
+    if (e.target.closest(".swipe-action") || e.target.closest(".drag-handle")
+        || e.target.closest(".link-btn")) return;
     g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, from: s.x, axis: null, tr: tracker() };
     g.tr.add(e.clientX, e.timeStamp);
   });

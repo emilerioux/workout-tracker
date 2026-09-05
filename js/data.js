@@ -15,6 +15,7 @@ const K = {
   sessions:  "wt2-sessions",
   hint:      "wt2-hint-seen",
   accentFix: "wt2-accents-v1",
+  groupFix: "wt2-groups-v1",
   tab:       "wt2-tab",
 };
 
@@ -223,11 +224,13 @@ function importOldApp() {
       id: p.id || uid(),
       name: p.name || "Sans nom",
       accent: (DB.programs.length + addedProgs) % 6,
-      exercises: (p.exercises || []).map((e) => ({
+      exercises: (p.exercises || []).map((e, i) => ({
         name: e.name,
         sets: e.sets ?? null,
         reps: e.reps ?? null,
-        group: e.group ?? 0,
+        /* Sans groupe d'origine, chaque exercice est seul : un `0`
+           partout aurait fait un seul superset de tout le programme. */
+        group: Number.isFinite(e.group) ? e.group : i,
       })),
     });
     addedProgs++;

@@ -434,12 +434,45 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
 .ex-row > .ex-num, .draft-row > .ex-num { margin-left: 14px; }
 .ex-row > .row-stripe + .ex-num, .draft-row > .row-stripe + .ex-num { margin-left: 0; }
 .ex-row.ss { border-color: rgba(10,132,255,.28); background: rgba(10,132,255,.07); }
+
+/* Dans l'éditeur la liste reste à plat — sinon le glissé qui
+   réordonne ne verrait plus des rangées sœurs — alors c'est la
+   teinte qui dit l'enchaînement. Fond OPAQUE et non du verre :
+   l'action « supprimer » est posée dessous et transparaîtrait. */
+.draft-row { background: var(--elev); }
+.draft-row.ss {
+  background: linear-gradient(rgba(10,132,255,.1), rgba(10,132,255,.1)), var(--elev);
+  border-color: rgba(10,132,255,.3);
+}
+
+/* Un superset se lit comme UN bloc : l'encadré porte l'identité,
+   les rangées à l'intérieur redeviennent neutres pour qu'on voie
+   d'un coup d'œil ce qui s'enchaîne. */
+.ss-group {
+  list-style: none;
+  border: 1px solid rgba(10,132,255,.3);
+  background: rgba(10,132,255,.06);
+  border-radius: var(--r-md);
+  padding: 9px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.ss-head {
+  margin: 0; padding: 2px 4px 0;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.ss-head b {
+  font-size: .625rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--blue-tx);
+}
+.ss-head em { font-style: normal; font-size: .75rem; color: var(--tx-2); }
+.ss-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ss-group .ex-row.ss { background: var(--glass-2); border-color: transparent; }
 .ex-num {
   flex: none; width: 24px; text-align: center;
   font-size: .8125rem; font-weight: 600; color: var(--tx-3);
   font-variant-numeric: tabular-nums;
 }
-.ex-row.ss .ex-num b { color: var(--blue-tx); }
+.ex-row.ss .ex-num b, .draft-row.ss .ex-num b { color: var(--blue-tx); }
 .ex-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 0; }
 .ex-title { font-size: .9375rem; font-weight: 550; }
 .ex-sub { font-size: .75rem; color: var(--tx-2); }
@@ -695,6 +728,21 @@ textarea.input { resize: vertical; line-height: 1.45; }
 }
 .drag-handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .drag-handle:active { cursor: grabbing; color: var(--tx-2); }
+
+/* Le maillon : lie l'exercice à celui du dessus. Allumé, il est le
+   seul repère qui dit « ces deux-là s'enchaînent ». */
+.link-btn {
+  flex: none; display: grid; place-items: center;
+  width: 32px; height: 32px; padding: 0; margin-right: -2px;
+  border: 0; border-radius: 9px;
+  background: transparent; color: var(--tx-3);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .1s ease-out, background-color .16s ease, color .16s ease;
+}
+.link-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+.link-btn.on { background: rgba(10,132,255,.15); color: var(--blue-tx); }
+.link-btn:active { transform: scale(.88); }
+.link-btn.spacer { pointer-events: none; }
 .swipe-row.lifted { z-index: 5; box-shadow: var(--sh-card); }
 /* Opaque, sinon l'action « supprimer » posée dessous transparaît
    à travers la rangée soulevée. */
@@ -821,6 +869,15 @@ textarea.input { resize: vertical; line-height: 1.45; }
 .ex-name { margin: 0; font-size: clamp(1.8rem, 8.4vw, 2.4rem); font-weight: 700; line-height: 1.03; letter-spacing: -.032em; }
 .ex-target { margin: 9px 0 0; font-size: .875rem; color: var(--tx-2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ex-target b { font-weight: 600; color: var(--tx); }
+/* Deux ou trois noms sur la même carte : le corps de titre plein
+   format les pousserait hors de l'écran avant le premier tour. */
+.ss-title {
+  font-size: clamp(1.35rem, 5.6vw, 1.75rem);
+  line-height: 1.12;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px .35em;
+}
+.ss-title i { font-style: normal; font-weight: 600; font-size: .8em; color: var(--accent-tx); }
+
 .ex-note {
   margin: 12px 0 0; padding: 10px 13px;
   border-left: 2px solid rgba(10,132,255,.5);
@@ -840,6 +897,29 @@ textarea.input { resize: vertical; line-height: 1.45; }
   will-change: transform;
 }
 .set-idx { font-size: .8125rem; font-weight: 600; color: var(--tx-3); text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Séparateur de tour : c'est lui qui donne au superset sa forme —
+   tour 1 (A1 puis A2), tour 2, et ainsi de suite. */
+.round-key {
+  display: flex; align-items: center; gap: 10px;
+  margin: 6px 2px -1px;
+  font-size: .625rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--tx-3);
+}
+.round-key:first-child { margin-top: 0; }
+.round-key::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
+.round-key.done { color: color-mix(in srgb, var(--accent-tx) 75%, transparent); }
+.round-key.done::after { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* Dans un superset la rangée porte le nom de l'exercice : sans lui,
+   deux lignes de chiffres identiques ne voudraient rien dire. */
+.ss-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ss-ex {
+  font-size: .75rem; font-weight: 550; color: var(--tx-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.set.done .ss-ex { color: var(--tx-3); }
+.set.active .ss-ex { color: var(--tx); font-size: .8125rem; }
 .set-vals { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .num { position: relative; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--tx-3); font-size: 1.0625rem; }
 .unit { font-size: .75rem; color: var(--tx-3); font-weight: 500; }
@@ -1002,7 +1082,7 @@ textarea.input { resize: vertical; line-height: 1.45; }
     --tx-2: rgba(20,22,26,.84); --tx-3: rgba(20,22,26,.62);
     --line: rgba(0,0,0,.32); --line-hi: rgba(0,0,0,.48);
   }
-  .set, .stat, .card-surface, .prog-card, .ex-row { border-color: var(--line); }
+  .set, .stat, .card-surface, .prog-card, .ex-row, .ss-group { border-color: var(--line); }
   .chrome-top, .chrome-bottom, .page-bar, .tabbar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 

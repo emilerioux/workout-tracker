@@ -8,6 +8,7 @@
 const S = {
   program: null,
   exercises: [],
+  blocks: [],
   state: [],
   cards: [],
   dots: [],
@@ -23,21 +24,48 @@ const sEl = (id) => document.getElementById(id);
 const sessionRoot = () => sEl("session");
 const CHECK = '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>';
 
-/* Étiquettes d'exercice : un groupe de superset porte une lettre
-   (A, B…), les exercices seuls gardent leur propre numérotation.
-   Sinon la liste saute — 1, A, A, 4 — et ça se lit mal. */
-function supersetLabels(exs) {
-  const count = {};
-  exs.forEach((e) => { count[e.group] = (count[e.group] || 0) + 1; });
-  const letters = {};
-  let nextLetter = 0, nextNum = 0;
-  return exs.map((e) => {
-    if (count[e.group] > 1) {
-      if (letters[e.group] === undefined) letters[e.group] = String.fromCharCode(65 + nextLetter++);
-      return { text: letters[e.group], superset: true };
-    }
-    return { text: String(++nextNum), superset: false };
+/* Un superset, ce sont des exercices QUI SE SUIVENT et qui portent
+   le même groupe. Compter les groupes sans regarder l'ordre laissait
+   passer un « A … B … A » impossible à enchaîner dans la salle. */
+const sameGroup = (a, b) =>
+  !!a && !!b && a.group != null && b.group != null && a.group === b.group;
+
+function supersetRuns(exs) {
+  const runs = [];
+  exs.forEach((e, i) => {
+    if (i && sameGroup(exs[i - 1], e)) runs[runs.length - 1].push(i);
+    else runs.push([i]);
   });
+  return runs;
+}
+
+/* Étiquettes : une suite de 2+ porte une lettre et un rang (A1, A2…),
+   les exercices seuls gardent leur propre numérotation. Sinon la
+   liste saute — 1, A, A, 4 — et ça se lit mal. */
+function supersetLabels(exs) {
+  const out = [];
+  let nextLetter = 0, nextNum = 0;
+  supersetRuns(exs).forEach((run) => {
+    if (run.length > 1) {
+      const letter = String.fromCharCode(65 + nextLetter++);
+      run.forEach((i, k) => { out[i] = { text: `${letter}${k + 1}`, letter, pos: k, superset: true }; });
+    } else {
+      out[run[0]] = { text: String(++nextNum), letter: null, pos: 0, superset: false };
+    }
+  });
+  return out;
+}
+
+/* Une carte de séance = un bloc. Un superset entier tient sur une
+   seule carte : dans la salle on fait A1 puis A2 sans repos, alors
+   les faire glisser l'un après l'autre n'avait aucun sens. */
+function groupBlocks(exs) {
+  const badges = supersetLabels(exs);
+  return supersetRuns(exs).map((members) => ({
+    members,
+    superset: members.length > 1,
+    letter: badges[members[0]].letter,
+  }));
 }
 
 /* Première valeur numérique d'une consigne « 8-10 » → 8 */
@@ -52,7 +80,7 @@ function startSession(program) {
 
   S.program = program;
   S.exercises = program.exercises.map((e) => ({ ...e }));
-  S.badges = supersetLabels(S.exercises);
+  S.blocks = groupBlocks(S.exercises);
   S.idx = 0;
   S.beatenPRs = [];
   S.logged = new Set();
@@ -78,7 +106,7 @@ function startSession(program) {
   buildCards();
   sEl("program-name").textContent = program.name;
   sEl("sheet-title").textContent = program.name;
-  sEl("head-count").textContent = `1 sur ${S.exercises.length}`;
+  sEl("head-count").textContent = `1 sur ${S.blocks.length}`;
   sEl("stat-time").textContent = "0:00";
 
   sessionRoot().hidden = false;
@@ -124,73 +152,149 @@ function buildCards() {
   const stack = sEl("stack"), dotsEl = sEl("dots");
   stack.innerHTML = ""; dotsEl.innerHTML = "";
 
-  S.cards = S.exercises.map((ex, i) => {
-    const badge = S.badges[i].superset ? S.badges[i].text : null;
-    const st = S.state[i];
-    const target = [
-      st.target ? `<b>${st.target}</b> séries` : null,
-      ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
-    ].filter(Boolean).join(" · ");
-    const note = DB.notes[ex.name];
-    const lastTxt = st.last
-      ? `dernière fois <b>${fmt(st.last.perSet ? Math.max(...st.last.perSet.map((s) => s.weight)) : st.last.weight)} lb</b>`
-      : `<b>première fois</b>`;
-
+  S.cards = S.blocks.map((blk) => {
     const el = document.createElement("article");
-    el.className = "card";
-    el.innerHTML =
-      `<div class="card-inner">` +
-      (badge ? `<span class="badge">Superset ${badge}</span>` : "") +
-      `<h2 class="ex-name">${esc(ex.name)}</h2>` +
-      `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt}</span></p>` +
-      (note ? `<p class="ex-note">${esc(note)}</p>` : "") +
-      `<ol class="sets"></ol>` +
-      `</div>`;
+    el.className = "card" + (blk.superset ? " card-ss" : "");
+    el.innerHTML = `<div class="card-inner">${blk.superset ? ssHead(blk) : soloHead(blk.members[0])}<ol class="sets"></ol></div>`;
     stack.appendChild(el);
 
     const d = document.createElement("span");
     d.className = "dot";
     dotsEl.appendChild(d);
-    S.dots.push(d);
 
     return { el, sets: el.querySelector(".sets") };
   });
   S.dots = [...dotsEl.children];
-  S.exercises.forEach((_, i) => renderSets(i));
+  S.cards.forEach((_, b) => renderCard(b));
 }
 
-function renderSets(i) {
-  const st = S.state[i], ol = S.cards[i].sets;
-  const n = Math.max(st.target, st.done.length);
-  ol.innerHTML = "";
-  for (let j = 0; j < n; j++) {
-    const rec = st.done[j];
-    const active = j === st.done.length;
-    const li = document.createElement("li");
-    li.className = "set" + (rec ? " done" : active ? " active" : "");
+/* Combien de rangées pour un exercice : sa cible, ou plus si des
+   séries en trop ont été validées. */
+const nRows = (i) => Math.max(S.state[i].target, S.state[i].done.length);
+const ssRounds = (blk) => Math.max(...blk.members.map(nRows));
 
-    let vals;
-    if (rec) {
-      vals = `<span class="num">${fmt(rec.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num">${rec.reps}</span>`;
-    } else if (active) {
-      const unset = !st.last && !st.draft.weight ? " unset" : "";
-      vals = `<span class="num${unset}" data-k="weight">${fmt(st.draft.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num" data-k="reps">${st.draft.reps}</span>`;
-    } else {
-      vals = `<span class="num">—</span><span class="unit">lb</span><span class="times">×</span><span class="num">—</span>`;
+const lastTxt = (i) => {
+  const st = S.state[i];
+  return st.last
+    ? `dernière fois <b>${fmt(st.last.perSet ? Math.max(...st.last.perSet.map((s) => s.weight)) : st.last.weight)} lb</b>`
+    : `<b>première fois</b>`;
+};
+
+/* En-tête d'un exercice seul. */
+function soloHead(i) {
+  const ex = S.exercises[i], st = S.state[i];
+  const target = [
+    st.target ? `<b>${st.target}</b> séries` : null,
+    ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
+  ].filter(Boolean).join(" · ");
+  const note = DB.notes[ex.name];
+  return `<h2 class="ex-name">${esc(ex.name)}</h2>` +
+    `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
+    (note ? `<p class="ex-note">${esc(note)}</p>` : "");
+}
+
+/* En-tête d'un superset : les noms enchaînés, puis le nombre de
+   tours. Le détail séries/reps se lit dans les rangées — le répéter
+   ici pousserait le premier tour hors de l'écran. */
+function ssHead(blk) {
+  const names = blk.members
+    .map((i) => `<span>${esc(S.exercises[i].name)}</span>`)
+    .join(`<i aria-hidden="true">+</i>`);
+  const notes = blk.members
+    .filter((i) => DB.notes[S.exercises[i].name])
+    .map((i) => `<p class="ex-note"><b>${esc(S.exercises[i].name)}</b> — ${esc(DB.notes[S.exercises[i].name])}</p>`)
+    .join("");
+  return `<span class="badge">Superset ${blk.letter}</span>` +
+    `<h2 class="ex-name ss-title">${names}</h2>` +
+    `<p class="ex-target"><b>${ssRounds(blk)}</b> tours<span class="dot-sep"></span>` +
+    `<span>${blk.members.length} exercices enchaînés</span></p>` +
+    notes;
+}
+
+/* La série en attente d'un bloc : on descend tour par tour, et dans
+   un tour on suit l'ordre des exercices. C'est l'ordre réel du
+   superset — A1, A2, puis on remonte au tour suivant. */
+function activeCell(b) {
+  const blk = S.blocks[b];
+  for (let r = 0; r < ssRounds(blk); r++) {
+    for (let k = 0; k < blk.members.length; k++) {
+      const i = blk.members[k];
+      if (r < nRows(i) && S.state[i].done.length === r) return { i, k, r };
     }
-
-    li.innerHTML =
-      `<span class="set-idx">${j + 1}</span>` +
-      `<span class="set-vals">${vals}</span>` +
-      `<span class="set-check">${CHECK}</span>` +
-      (active
-        ? `<p class="scrub-hint">${!st.last && !st.draft.weight
-             ? "Première fois sur cet exercice — règle le poids en le tirant vers le haut"
-             : "Tire un chiffre vers le haut ou le bas"}</p>`
-        : "");
-    ol.appendChild(li);
-    if (active) li.querySelectorAll(".num[data-k]").forEach((el) => bindScrub(el, el.dataset.k, i));
   }
+  return null;
+}
+
+function renderCard(b) {
+  const blk = S.blocks[b], ol = S.cards[b].sets;
+  ol.innerHTML = "";
+
+  if (!blk.superset) {
+    const i = blk.members[0];
+    for (let j = 0; j < nRows(i); j++) {
+      ol.appendChild(setRow(i, j, String(j + 1), null, j === S.state[i].done.length));
+    }
+    return;
+  }
+
+  const cell = activeCell(b);
+  for (let r = 0; r < ssRounds(blk); r++) {
+    const head = document.createElement("li");
+    head.className = "round-key" +
+      (blk.members.every((i) => r >= nRows(i) || S.state[i].done.length > r) ? " done" : "");
+    head.innerHTML = `<span>Tour ${r + 1}</span>`;
+    ol.appendChild(head);
+    blk.members.forEach((i, k) => {
+      if (r >= nRows(i)) return;
+      ol.appendChild(setRow(i, r, `${blk.letter}${k + 1}`, S.exercises[i].name,
+        !!cell && cell.i === i && cell.r === r));
+    });
+  }
+}
+
+/* Une rangée de série. `name` n'est rempli que dans un superset :
+   sans lui on ne saurait pas de quel exercice parle la rangée. */
+function setRow(i, j, tag, name, active) {
+  const st = S.state[i], rec = st.done[j];
+  const li = document.createElement("li");
+  li.className = "set" + (rec ? " done" : active ? " active" : "") + (name ? " ss-set" : "");
+  li.dataset.ex = String(i);
+  li.dataset.r = String(j);
+
+  let vals;
+  if (rec) {
+    vals = `<span class="num">${fmt(rec.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num">${rec.reps}</span>`;
+  } else if (active) {
+    const unset = !st.last && !st.draft.weight ? " unset" : "";
+    vals = `<span class="num${unset}" data-k="weight">${fmt(st.draft.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num" data-k="reps">${st.draft.reps}</span>`;
+  } else {
+    vals = `<span class="num">—</span><span class="unit">lb</span><span class="times">×</span><span class="num">—</span>`;
+  }
+
+  li.innerHTML =
+    `<span class="set-idx">${esc(tag)}</span>` +
+    (name
+      ? `<span class="ss-cell"><span class="ss-ex">${esc(name)}</span><span class="set-vals">${vals}</span></span>`
+      : `<span class="set-vals">${vals}</span>`) +
+    `<span class="set-check">${CHECK}</span>` +
+    (active
+      ? `<p class="scrub-hint">${!st.last && !st.draft.weight
+           ? "Première fois sur cet exercice — règle le poids en le tirant vers le haut"
+           : "Tire un chiffre vers le haut ou le bas"}</p>`
+      : "");
+
+  if (active) li.querySelectorAll(".num[data-k]").forEach((el) => bindScrub(el, el.dataset.k, i));
+  return li;
+}
+
+/* Dans un superset, la série suivante change d'exercice : si elle
+   tombe hors de l'écran, on va la chercher. */
+function revealActive(b) {
+  const card = S.cards[b].el, row = card.querySelector(".set.active");
+  if (!row) return;
+  const cr = card.getBoundingClientRect(), rr = row.getBoundingClientRect();
+  if (rr.top >= cr.top + 24 && rr.bottom <= cr.bottom - 24) return;
+  row.scrollIntoView({ behavior: REDUCED.matches ? "auto" : "smooth", block: "center" });
 }
 
 /* Molette verticale sur un chiffre. */
@@ -246,7 +350,7 @@ function paintStack(p) {
   }
   for (let i = 0; i < S.dots.length; i++) {
     const t = Math.max(0, 1 - Math.abs(i - p));
-    const base = exDone(i) ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--dot)";
+    const base = blockDone(i) ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--dot)";
     S.dots[i].style.transform = `scale(${1 + 0.95 * t})`;
     S.dots[i].style.background = t > 0.02 ? `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, ${base})` : base;
   }
@@ -256,6 +360,7 @@ function sessionLayout() { pageW = sEl("stack").clientWidth || 1; paintStack(sPo
 addEventListener("resize", () => { if (S.open) sessionLayout(); });
 
 const exDone = (i) => S.state[i] && S.state[i].done.length >= S.state[i].target;
+const blockDone = (b) => S.blocks[b] && S.blocks[b].members.every(exDone);
 const allDone = () => S.state.every((_, i) => exDone(i));
 const doneSets = () => S.state.reduce((n, s) => n + s.done.length, 0);
 const totalSets = () => S.state.reduce((n, s) => n + s.target, 0);
@@ -320,11 +425,18 @@ const fillS = new Spring(0, { response: 0.38, damping: 1, restDelta: 0.002,
   onUpdate: (v) => { const f = sEl("primary-fill"); f.style.transform = `scaleY(${v})`; f.style.opacity = String(v); } });
 
 function updateButton() {
-  const st = S.state[S.idx];
+  const blk = S.blocks[S.idx], cell = activeCell(S.idx);
   let label, go;
-  if (st.done.length < st.target) { label = `Valider la série ${st.done.length + 1}`; go = false; }
+  if (cell) {
+    /* Dans un superset le bouton dit quel exercice il valide : la
+       rangée active est plus bas dans la carte, pas sous le pouce. */
+    label = blk.superset
+      ? `Valider ${blk.letter}${cell.k + 1} · tour ${cell.r + 1}`
+      : `Valider la série ${cell.r + 1}`;
+    go = false;
+  }
   else if (allDone()) { label = "Terminer la séance"; go = true; }
-  else { label = "Exercice suivant"; go = true; }
+  else { label = S.blocks[nextIncomplete()].superset ? "Superset suivant" : "Exercice suivant"; go = true; }
   sEl("commit-label").textContent = label;
   sEl("commit").classList.toggle("go", go);
   fillS.to(go ? 1 : 0);
@@ -332,22 +444,24 @@ function updateButton() {
 
 function nextIncomplete() {
   for (let k = 1; k <= S.cards.length; k++) {
-    const i = (S.idx + k) % S.cards.length;
-    if (!exDone(i)) return i;
+    const b = (S.idx + k) % S.cards.length;
+    if (!blockDone(b)) return b;
   }
   return S.idx;
 }
 
 /* ── Valider une série ────────────────────────────────────── */
 function commitSet() {
-  const st = S.state[S.idx], ex = S.exercises[S.idx];
+  const b = S.idx, blk = S.blocks[b], cell = activeCell(b);
+  if (!cell) return;
+  const st = S.state[cell.i], ex = S.exercises[cell.i];
   const entry = { ...st.draft };
   const prev = DB.prs[ex.name] ?? 0;
   const isPR = entry.weight > prev;
 
   st.done.push(entry);
-  renderSets(S.idx);
-  const row = S.cards[S.idx].sets.children[st.done.length - 1];
+  renderCard(b);
+  const row = S.cards[b].sets.querySelector(`[data-ex="${cell.i}"][data-r="${cell.r}"]`);
   if (row) pop(row, 1.045, 0.5);
 
   if (isPR) {
@@ -367,12 +481,16 @@ function commitSet() {
   updateButton();
   dismissHint();
 
-  if (exDone(S.idx)) {
-    flushExercise(S.idx);
+  if (exDone(cell.i)) flushExercise(cell.i);
+
+  /* On ne quitte la carte qu'une fois le bloc entier bouclé — sinon
+     un superset renverrait ailleurs entre A1 et A2. */
+  if (blockDone(b)) {
     if (!allDone()) {
-      const at = S.idx;
-      setTimeout(() => { if (exDone(at) && S.idx === at) goTo(nextIncomplete()); }, isPR ? 900 : 420);
+      setTimeout(() => { if (blockDone(b) && S.idx === b) goTo(nextIncomplete()); }, isPR ? 900 : 420);
     }
+  } else if (blk.superset) {
+    revealActive(b);
   }
 }
 
@@ -505,8 +623,7 @@ function fillSummary() {
 function initSession() {
   initStackGestures();
   sEl("commit").addEventListener("click", () => {
-    const st = S.state[S.idx];
-    if (st.done.length < st.target) commitSet();
+    if (activeCell(S.idx)) commitSet();
     else if (allDone()) openSummary();
     else goTo(nextIncomplete());
   });

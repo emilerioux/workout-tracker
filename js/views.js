@@ -59,6 +59,24 @@ function normalizeAccents() {
   if (changed) persist.programs();
 }
 
+/* L'ancienne app n'avait pas de supersets : l'import posait `group:
+   0` partout, ce qui transformait un programme entier en un seul
+   superset géant. On renumérote — UNE SEULE FOIS, et seulement au-
+   delà de 2 exercices, pour ne pas casser un vrai superset. */
+function normalizeGroups() {
+  if (localStorage.getItem(K.groupFix)) return;
+  try { localStorage.setItem(K.groupFix, "1"); } catch (_) {}
+  let changed = false;
+  DB.programs.forEach((p) => {
+    const ex = p.exercises || [];
+    if (ex.length < 3) return;
+    if (!ex.every((e) => e.group === ex[0].group)) return;
+    ex.forEach((e, i) => { e.group = i; });
+    changed = true;
+  });
+  if (changed) persist.programs();
+}
+
 /* La couleur d'une entrée d'historique vient de son programme.
    Une entrée manuelle, ou dont le programme a été supprimé, garde
    un filet neutre : l'alignement des lignes ne bouge pas. */
@@ -328,6 +346,23 @@ function relDay(dateStr) {
   return `il y a ${Math.round(diff / 30)} mois`;
 }
 
+/* Une rangée d'exercice de la fiche programme. Extraite parce que
+   les exercices d'un superset la réutilisent telle quelle, à
+   l'intérieur de leur encadré. */
+function exRow(e, badge, stripe) {
+  const sub = [e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null]
+    .filter(Boolean).join(" · ") || "libre";
+  return `<li class="ex-row${badge.superset ? " ss" : ""}">
+      <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
+      <span class="ex-num">${badge.superset ? `<b>${badge.text}</b>` : badge.text}</span>
+      <span class="ex-main">
+        <span class="ex-title">${esc(e.name)}</span>
+        <span class="ex-sub">${sub}</span>
+      </span>
+      <span class="ex-best">${DB.prs[e.name] ? `${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
+    </li>`;
+}
+
 function showProgram(id) {
   const p = DB.programs.find((x) => x.id === id);
   if (!p) return;
@@ -351,16 +386,16 @@ function showProgram(id) {
          <p>${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""}</p>
        </div>
        <ol class="ex-list">
-         ${p.exercises.map((e, i) => `
-           <li class="ex-row${badges[i].superset ? " ss" : ""}">
-             <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
-             <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
-             <span class="ex-main">
-               <span class="ex-title">${esc(e.name)}</span>
-               <span class="ex-sub">${[e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre"}</span>
-             </span>
-             <span class="ex-best">${DB.prs[e.name] ? `${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
-           </li>`).join("")}
+         ${supersetRuns(p.exercises).map((run) => {
+           const rows = run.map((i) => exRow(p.exercises[i], badges[i], stripe)).join("");
+           if (run.length < 2) return rows;
+           const tours = Math.max(...run.map((i) => p.exercises[i].sets || 0));
+           return `<li class="ss-group">
+             <p class="ss-head"><b>Superset ${badges[run[0]].letter}</b>
+               <em>${tours ? `${tours} tours · ` : ""}enchaînés sans repos</em></p>
+             <ol class="ss-rows">${rows}</ol>
+           </li>`;
+         }).join("")}
        </ol>
        <button class="primary big" id="start-session"><span class="primary-label">Commencer la séance</span></button>
        <button class="ghost-btn danger-btn" id="del-prog">Supprimer le programme</button>
@@ -382,6 +417,35 @@ function showProgram(id) {
     });
   });
 }
+
+/* ── Supersets dans l'éditeur ──────────────────────────────
+   Le premier numéro de groupe libre. On prend max+1 plutôt que de
+   combler un trou : deux exercices éloignés qui retomberaient sur
+   le même numéro se souderaient si on les rapprochait un jour. */
+const freeGroup = (list) =>
+  list.reduce((m, e) => (Number.isFinite(e.group) && e.group > m ? e.group : m), -1) + 1;
+
+/* Lier un exercice à celui du dessus, ou l'en détacher. Détacher ne
+   casse que ce maillon-là : ce qui le suit reste soudé à lui, sinon
+   défaire un tri-set le ferait exploser en trois. */
+function toggleLink(list, i) {
+  if (i < 1) return;
+  const prev = list[i - 1];
+  const linked = sameGroup(prev, list[i]);
+  const tail = [i];
+  for (let k = i + 1; k < list.length && sameGroup(list[k - 1], list[k]); k++) tail.push(k);
+  let g;
+  if (linked) {
+    g = freeGroup(list);
+  } else {
+    if (prev.group == null) prev.group = freeGroup(list);
+    g = prev.group;
+  }
+  tail.forEach((k) => { list[k].group = g; });
+}
+
+const LINK_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h2a5 5 0 0 1 0 10h-2M9 17H7A5 5 0 0 1 7 7h2"/><path d="M8 12h8"/></svg>';
+const LINK_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h2a5 5 0 0 1 0 10h-2M9 17H7A5 5 0 0 1 7 7h2"/><path d="M9.5 12h1M13.5 12h1"/></svg>';
 
 /* ── Éditeur de programme ─────────────────────────────────── */
 function editProgram(existing) {
@@ -413,7 +477,7 @@ function editProgram(existing) {
             aria-label="Couleur ${i + 1}${taken.has(i) ? " — déjà prise par un autre programme" : ""}"></button>`).join("")}
        </div>
        <p class="block-key">Exercices</p>
-       <p class="fineprint" style="margin:-4px 0 10px">Glisse la poignée à droite pour changer l'ordre.</p>
+       <p class="fineprint" style="margin:-4px 0 10px">Glisse la poignée pour changer l'ordre. Le maillon lie un exercice à celui du dessus — les deux deviennent un superset.</p>
        <div id="draft-list" class="draft-list"></div>
        <button class="tile-btn" id="add-ex">
          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter un exercice
@@ -421,6 +485,8 @@ function editProgram(existing) {
        <button class="primary big" id="save-prog"><span class="primary-label">Enregistrer</span></button>
      </div>`
   );
+
+  const linked = (i) => i > 0 && sameGroup(draft.exercises[i - 1], draft.exercises[i]);
 
   const drawDraft = () => {
     const host = $("draft-list");
@@ -434,18 +500,32 @@ function editProgram(existing) {
         <button type="button" class="swipe-action" aria-label="Supprimer">
           <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13"/></svg>
         </button>
-        <div class="swipe-surface draft-row">
+        <div class="swipe-surface draft-row${badges[i].superset ? " ss" : ""}">
           <span class="row-stripe" style="background:${stripeOf(draft)}" aria-hidden="true"></span>
           <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
           <span class="ex-main">
             <span class="ex-title">${esc(e.name)}</span>
             <span class="ex-sub">${[e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre"}</span>
           </span>
+          ${i === 0
+            ? `<span class="link-btn spacer" aria-hidden="true"></span>`
+            : `<button type="button" class="link-btn${linked(i) ? " on" : ""}" data-i="${i}"
+                 aria-pressed="${linked(i)}"
+                 aria-label="${linked(i) ? "Détacher" : "Mettre en superset avec"} « ${esc(draft.exercises[i - 1].name)} »"
+                 >${linked(i) ? LINK_ON : LINK_OFF}</button>`}
           <span class="drag-handle" role="button" tabindex="0" aria-label="Déplacer ${esc(e.name)}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14M5 15h14"/></svg>
           </span>
         </div>
       </div>`).join("");
+    host.querySelectorAll(".link-btn[data-i]").forEach((b) => {
+      b.addEventListener("click", () => {
+        toggleLink(draft.exercises, Number(b.dataset.i));
+        buzz(9);
+        drawDraft();
+      });
+    });
+
     host.querySelectorAll(".swipe-row").forEach((row) => {
       swipeToReveal(row, { onCommit: () => {
         draft.exercises.splice(Number(row.dataset.i), 1);
