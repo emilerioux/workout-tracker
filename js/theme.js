@@ -28,27 +28,30 @@ const ACCENT_CHOICES = [
 ];
 
 const THEME_MODES = [
-  { id: "auto",   name: "Système" },
   { id: "clair",  name: "Clair" },
   { id: "sombre", name: "Sombre" },
 ];
 
-const DARK_Q = matchMedia("(prefers-color-scheme: dark)");
-
 let accentId = localStorage.getItem(PREF.accent) || "vert";
-let themeMode = localStorage.getItem(PREF.theme) || "auto";
+let themeMode = localStorage.getItem(PREF.theme) || "";
 if (!ACCENT_CHOICES.some((a) => a.id === accentId)) accentId = "vert";
-if (!THEME_MODES.some((m) => m.id === themeMode)) themeMode = "auto";
+
+/* Il y avait un mode « Système ». Il ne disait rien de plus que le
+   thème qu'il choisissait, et laissait l'app changer d'apparence
+   toute seule au coucher du soleil. On garde le réglage iOS comme
+   valeur de DÉPART — première ouverture, ou ancien réglage
+   « auto » — puis c'est le choix explicite qui commande. */
+if (!THEME_MODES.some((m) => m.id === themeMode)) {
+  themeMode = matchMedia("(prefers-color-scheme: light)").matches ? "clair" : "sombre";
+  try { localStorage.setItem(PREF.theme, themeMode); } catch (_) {}
+}
 
 const accentOfId = (id) => ACCENT_CHOICES.find((a) => a.id === id) || ACCENT_CHOICES[0];
 const currentAccent = () => accentOfId(accentId);
-/* Le mode « auto » se résout ici : le CSS n'a qu'un seul cas à
-   connaître, `[data-theme="light"]`, et le reste est sombre. */
-const resolvedTheme = () => (themeMode === "auto" ? (DARK_Q.matches ? "sombre" : "clair") : themeMode);
 
 function applyAppearance() {
   const a = currentAccent();
-  const light = resolvedTheme() === "clair";
+  const light = themeMode === "clair";
   const root = document.documentElement;
 
   root.style.setProperty("--accent", a.hex);
@@ -77,9 +80,6 @@ function setThemeMode(id) {
   try { localStorage.setItem(PREF.theme, id); } catch (_) {}
   applyAppearance();
 }
-
-/* En mode système, on suit les changements de l'OS en direct. */
-DARK_Q.addEventListener("change", () => { if (themeMode === "auto") applyAppearance(); });
 
 /* Appliqué avant le premier rendu — sinon un flash sombre. */
 applyAppearance();

@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reps">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -139,18 +139,10 @@
       <div class="page-scroll">
         <h1 class="big-title">Réglages</h1>
 
-        <div class="card-surface block" id="import-card">
-          <h3>Récupérer mes données</h3>
-          <p class="muted" id="import-scan">Analyse…</p>
-          <button class="primary compact" id="import-old-btn"><span class="primary-label">Importer depuis Mes Workouts</span></button>
-          <p class="fineprint">Copie seulement. L'ancienne app garde tout, elle n'est jamais modifiée.</p>
-        </div>
-
         <div class="card-surface block">
           <h3>Apparence</h3>
-          <p class="muted">Le mode suit ton téléphone par défaut. La couleur d'accent change les boutons, les onglets, les graphiques et le calendrier.</p>
+          <p class="muted">La couleur d'accent change les boutons, les onglets, les graphiques et le calendrier.</p>
           <div class="segmented" id="theme-mode">
-            <button type="button" data-mode="auto">Système</button>
             <button type="button" data-mode="clair">Clair</button>
             <button type="button" data-mode="sombre">Sombre</button>
           </div>
@@ -170,6 +162,12 @@
           <h3>Exercices</h3>
           <p class="muted">Renomme un exercice — il se met à jour dans l'historique, les programmes et les records. Ajoute une note technique si tu veux.</p>
           <button class="ghost-btn" id="manage-ex-btn">Gérer mes exercices</button>
+        </div>
+
+        <div class="card-surface block">
+          <h3>Ancienne app</h3>
+          <p class="muted" id="import-scan">Ce qui reste de <b>Mes Workouts</b> sur cet appareil.</p>
+          <button class="ghost-btn" id="import-old-btn">Récupérer mes données</button>
         </div>
 
         <div class="card-surface block danger">
@@ -286,13 +284,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=9"></script>
-<script src="js/motion.js?v=9"></script>
-<script src="js/data.js?v=9"></script>
-<script src="js/chart.js?v=9"></script>
-<script src="js/session.js?v=9"></script>
-<script src="js/views.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/theme.js?v=10"></script>
+<script src="js/motion.js?v=10"></script>
+<script src="js/data.js?v=10"></script>
+<script src="js/chart.js?v=10"></script>
+<script src="js/session.js?v=10"></script>
+<script src="js/views.js?v=10"></script>
+<script src="js/app.js?v=10"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

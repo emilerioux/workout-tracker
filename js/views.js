@@ -937,19 +937,50 @@ async function renderPhotos() {
 function renderSettings() {
   const s = scanOldApp();
   const total = s.logs + s.programs + s.bodyweight;
-  const card = $("import-card");
-  if (!total) {
-    $("import-scan").textContent = "Rien trouvé de l'ancienne app sur cet appareil. Si tes données sont sur ton téléphone, ouvre Reps depuis le même navigateur — ou importe un fichier exporté depuis l'ancienne app.";
-    $("import-old-btn").hidden = true;
-  } else {
-    $("import-scan").innerHTML =
-      `Trouvé dans <b>Mes Workouts</b> : ${s.logs} entrée${s.logs > 1 ? "s" : ""} d'historique, ` +
-      `${s.programs} programme${s.programs > 1 ? "s" : ""}, ${s.bodyweight} pesée${s.bodyweight > 1 ? "s" : ""}.`;
-    $("import-old-btn").hidden = false;
-  }
-  card.hidden = false;
+  $("import-scan").innerHTML = total
+    ? `<b>${total}</b> élément${total > 1 ? "s" : ""} de <b>Mes Workouts</b> attendent encore sur cet appareil.`
+    : `Rien trouvé de <b>Mes Workouts</b> sur cet appareil.`;
   renderAppearance();
   $("version-line").textContent = `${DB.logs.length} entrées · ${DB.programs.length} programmes`;
+}
+
+/* Le détail vit dans une feuille : la récupération ne sert qu'une
+   fois, elle n'a pas à occuper le haut des réglages pour toujours. */
+function importSheet() {
+  const s = scanOldApp();
+  const total = s.logs + s.programs + s.bodyweight;
+
+  openSheet(
+    `<h2 class="sheet-h">Récupérer mes données</h2>
+     <p class="muted">${total
+        ? `Reps a remplacé <b>Mes Workouts</b>. Tes anciennes séances sont toujours dans
+           cet appareil : ceci en fait une <b>copie</b> dans Reps. L'ancienne app n'est
+           jamais modifiée, et réimporter deux fois ne duplique rien.`
+        : `Reps a remplacé <b>Mes Workouts</b>. Cette option copie les anciennes données
+           dans Reps, sans jamais toucher à l'ancienne app.`}</p>
+     ${total
+        ? `<div class="stat-row">
+             <div class="stat"><span class="stat-val tnum">${s.logs}</span><span class="stat-key">Entrées</span></div>
+             <div class="stat"><span class="stat-val tnum">${s.programs}</span><span class="stat-key">Programmes</span></div>
+             <div class="stat"><span class="stat-val tnum">${s.bodyweight}</span><span class="stat-key">Pesées</span></div>
+           </div>
+           <button class="primary" id="do-import"><span class="primary-label">Copier dans Reps</span></button>`
+        : `<p class="fineprint">Rien trouvé ici. Sur iPhone, une app ajoutée à l'écran
+             d'accueil a son propre espace de stockage : les anciennes données sont dans
+             celui de l'ancienne icône. Ouvre Reps depuis cette icône-là, ou importe un
+             fichier exporté depuis l'ancienne app.</p>`}`
+  );
+
+  if (!total) return;
+  $("do-import").addEventListener("click", () => {
+    const r = importOldApp();
+    closeSheet();
+    onSheetClose = () => {
+      refreshAll();
+      toast(`Importé : ${r.logs} entrées, ${r.programs} programmes`);
+      buzz([10, 40, 18]);
+    };
+  });
 }
 
 /* ── Apparence : mode et accent ───────────────────────────── */

@@ -182,20 +182,7 @@ function initApp() {
   });
 
   /* Réglages */
-  $("import-old-btn").addEventListener("click", () => {
-    const s = scanOldApp();
-    confirmSheet(
-      "Importer depuis Mes Workouts ?",
-      `${s.logs} entrées, ${s.programs} programmes et ${s.bodyweight} pesées seront copiés dans Reps. L'ancienne app n'est pas touchée, et réimporter deux fois ne duplique rien.`,
-      "Importer",
-      () => {
-        const r = importOldApp();
-        refreshAll();
-        toast(`Importé : ${r.logs} entrées, ${r.programs} programmes`);
-        buzz([10, 40, 18]);
-      }
-    );
-  });
+  $("import-old-btn").addEventListener("click", importSheet);
   $("export-btn").addEventListener("click", () => { exportJSON(); toast("Fichier exporté"); });
   $("import-file").addEventListener("change", (e) => {
     const f = e.target.files[0];
