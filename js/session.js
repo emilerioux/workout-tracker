@@ -246,9 +246,9 @@ function paintStack(p) {
   }
   for (let i = 0; i < S.dots.length; i++) {
     const t = Math.max(0, 1 - Math.abs(i - p));
-    const base = exDone(i) ? "rgba(48,209,88,.45)" : "rgba(255,255,255,.22)";
+    const base = exDone(i) ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--dot)";
     S.dots[i].style.transform = `scale(${1 + 0.95 * t})`;
-    S.dots[i].style.background = t > 0.02 ? `color-mix(in srgb, var(--green) ${Math.round(t * 100)}%, ${base})` : base;
+    S.dots[i].style.background = t > 0.02 ? `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, ${base})` : base;
   }
 }
 

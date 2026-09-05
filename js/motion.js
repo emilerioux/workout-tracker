@@ -120,7 +120,9 @@ function swipeToReveal(el, { width = 88, onCommit }) {
     onUpdate: (x) => { surface.style.transform = `translate3d(${-x}px,0,0)`; } });
 
   el.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".swipe-action")) return;
+    /* La poignée de réordonnancement joue en vertical : elle ne
+       doit jamais armer le glissé horizontal. */
+    if (e.target.closest(".swipe-action") || e.target.closest(".drag-handle")) return;
     g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, from: s.x, axis: null, tr: tracker() };
     g.tr.add(e.clientX, e.timeStamp);
   });
@@ -155,4 +157,73 @@ function swipeToReveal(el, { width = 88, onCommit }) {
   if (action) action.addEventListener("click", () => { buzz(12); onCommit(); });
   el._closeSwipe = () => { open = false; s.to(0); };
   return el._closeSwipe;
+}
+
+/* Glisser-déposer vertical pour réordonner une liste.
+   La rangée saisie suit le doigt au pixel ; les autres s'écartent
+   d'une hauteur de rangée, chacune sur son ressort, dès que la
+   rangée saisie franchit leur milieu. Rien n'est verrouillé : on
+   peut repartir dans l'autre sens en cours de route.
+   La poignée est un point de saisie séparé — le reste de la
+   rangée garde son glissé horizontal pour supprimer. */
+function dragToReorder(host, { rowSelector = ".swipe-row", onCommit }) {
+  const rows = [...host.querySelectorAll(rowSelector)];
+  if (rows.length < 2) return;
+
+  rows.forEach((row, i) => {
+    const handle = row.querySelector(".drag-handle");
+    if (!handle) return;
+
+    row._slide = new Spring(0, { response: 0.34, damping: 1, restDelta: 0.4,
+      onUpdate: (y) => { if (!row._held) row.style.transform = `translate3d(0,${y}px,0)`; } });
+
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const h = row.offsetHeight + 8;                 /* gap de .draft-list */
+      let cur = i, dy = 0;
+      row._held = true;
+      row.classList.add("lifted");
+      capture(handle, e.pointerId);
+      buzz(10);
+
+      const y0 = e.clientY;
+      const lift = new Spring(0, { response: 0.3, damping: 0.8, restDelta: 0.002,
+        onUpdate: (v) => { row.style.transform = `translate3d(0,${dy}px,0) scale(${1 + 0.035 * v})`; } });
+      lift.to(1);
+
+      const move = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        dy = ev.clientY - y0;
+        row.style.transform = `translate3d(0,${dy}px,0) scale(${1 + 0.035 * lift.x})`;
+        const next = Math.max(0, Math.min(rows.length - 1, i + Math.round(dy / h)));
+        if (next === cur) return;
+        cur = next;
+        buzz(7);
+        rows.forEach((other, j) => {
+          if (j === i) return;
+          let off = 0;
+          if (cur > i && j > i && j <= cur) off = -h;
+          if (cur < i && j >= cur && j < i) off = h;
+          other._slide.to(off);
+        });
+      };
+      const up = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        removeEventListener("pointermove", move);
+        removeEventListener("pointerup", up);
+        removeEventListener("pointercancel", up);
+        uncapture(handle, ev.pointerId);
+        row.classList.remove("lifted");
+        /* On repart de la position affichée, jamais de la cible. */
+        row._held = false;
+        row._slide.hold(dy);
+        row._slide.to((cur - i) * h, { damping: 0.85, response: 0.36 });
+        buzz(12);
+        setTimeout(() => { if (cur !== i) onCommit(i, cur); }, 210);
+      };
+      addEventListener("pointermove", move);
+      addEventListener("pointerup", up);
+      addEventListener("pointercancel", up);
+    });
+  });
 }

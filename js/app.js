@@ -26,6 +26,11 @@ function switchTab(tab, { instant = false } = {}) {
      et c'est pour ça qu'iOS échange ses onglets sans transition.
      Seul l'entrant se pose, brièvement. */
   if (from) $(`page-${from}`).hidden = true;
+  /* Au tout premier affichage il n'y a pas d'onglet sortant : on
+     cache toutes les autres pages. Sans ça, un onglet restauré
+     depuis sessionStorage se superpose à Programmes, qui n'est
+     pas marqué `hidden` dans le HTML. */
+  else TABS.forEach((t) => { if (t !== tab) $(`page-${t}`).hidden = true; });
   next.hidden = false;
 
   if (!instant && !REDUCED.matches) {
@@ -88,6 +93,7 @@ function initApp() {
 
   /* Historique */
   $("quick-log-btn").addEventListener("click", quickLogSheet);
+  initCalendarGestures();
 
   /* Progrès */
   $("prog-mode").addEventListener("click", (e) => {
@@ -150,6 +156,29 @@ function initApp() {
       renderPhotos();
       toast("Photo supprimée");
     });
+  });
+
+  /* Réglages — apparence */
+  $("theme-mode").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b || b.dataset.mode === themeMode) return;
+    setThemeMode(b.dataset.mode);
+    renderAppearance();
+    buzz(8);
+  });
+  $("accent-grid").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-accent]");
+    if (!b || b.dataset.accent === accentId) return;
+    setAccent(b.dataset.accent);
+    renderAppearance();
+    pop($("accent-grid").querySelector(".sw.on"), 1.18, 0.62);
+    buzz(9);
+  });
+
+  /* Un graphique est du SVG : ses couleurs sont lues au tracé,
+     pas héritées. Changer de thème ou d'accent le redessine. */
+  addEventListener("reps:appearance", () => {
+    if (currentTab === "progres") renderProgress();
   });
 
   /* Réglages */

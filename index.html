@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reps">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=4">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -41,6 +41,32 @@
       <div class="page-scroll">
         <h1 class="big-title">Historique</h1>
         <p class="big-sub" id="hist-sub"></p>
+
+        <section class="card-surface cal-card" aria-label="Calendrier des séances">
+          <header class="cal-nav">
+            <button class="icon-btn" id="cal-prev" aria-label="Mois précédent">
+              <svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>
+            </button>
+            <div class="cal-month">
+              <span class="cal-title" id="cal-title">—</span>
+              <span class="cal-sum" id="cal-sum"></span>
+            </div>
+            <button class="icon-btn" id="cal-next" aria-label="Mois suivant">
+              <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+            </button>
+          </header>
+          <div class="cal-dow" aria-hidden="true">
+            <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+          </div>
+          <div class="cal-viewport" id="cal-viewport">
+            <div class="cal-slide" id="cal-slide"><div class="cal-grid" id="cal-grid"></div></div>
+          </div>
+          <p class="cal-foot">
+            <span class="cal-swatch"></span> jour d'entraînement
+            <button type="button" class="cal-clear" id="cal-clear" hidden>Voir tout le mois</button>
+          </p>
+        </section>
+
         <button class="tile-btn" id="quick-log-btn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           Ajouter une entrée
@@ -118,6 +144,18 @@
           <p class="muted" id="import-scan">Analyse…</p>
           <button class="primary compact" id="import-old-btn"><span class="primary-label">Importer depuis Mes Workouts</span></button>
           <p class="fineprint">Copie seulement. L'ancienne app garde tout, elle n'est jamais modifiée.</p>
+        </div>
+
+        <div class="card-surface block">
+          <h3>Apparence</h3>
+          <p class="muted">Le mode suit ton téléphone par défaut. La couleur d'accent change les boutons, les onglets, les graphiques et le calendrier.</p>
+          <div class="segmented" id="theme-mode">
+            <button type="button" data-mode="auto">Système</button>
+            <button type="button" data-mode="clair">Clair</button>
+            <button type="button" data-mode="sombre">Sombre</button>
+          </div>
+          <div class="sw-grid" id="accent-grid"></div>
+          <p class="sw-name" id="accent-name"></p>
         </div>
 
         <div class="card-surface block">
@@ -248,12 +286,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/motion.js?v=2"></script>
-<script src="js/data.js?v=2"></script>
-<script src="js/chart.js?v=2"></script>
-<script src="js/session.js?v=2"></script>
-<script src="js/views.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
+<script src="js/theme.js?v=4"></script>
+<script src="js/motion.js?v=4"></script>
+<script src="js/data.js?v=4"></script>
+<script src="js/chart.js?v=4"></script>
+<script src="js/session.js?v=4"></script>
+<script src="js/views.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

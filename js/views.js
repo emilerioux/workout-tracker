@@ -5,11 +5,17 @@
 
 const $ = (id) => document.getElementById(id);
 
-/* Six accents de programme — identité visuelle, jamais porteuse
-   d'information : le nom du programme dit déjà tout. */
+/* Dix accents de programme — identité visuelle, jamais porteuse
+   d'information : le nom du programme dit déjà tout. Les six
+   premiers gardent leur rang historique : `accent` est stocké
+   comme un index, et réordonner repeindrait les programmes
+   existants. Les quatre derniers complètent la palette des
+   accents d'app. */
 const ACCENTS = [
   ["#30D158", "#1E8E44"], ["#0A84FF", "#0A5BC4"], ["#BF5AF2", "#7D3BAF"],
   ["#FF9F0A", "#C46E00"], ["#FF375F", "#B4223F"], ["#64D2FF", "#2E93BE"],
+  ["#40D9C0", "#268C7C"], ["#5E5CE6", "#3A3897"], ["#FFD426", "#C09B0B"],
+  ["#A0A4AD", "#63666E"],
 ];
 const accentOf = (p) => ACCENTS[(p.accent ?? 0) % ACCENTS.length];
 
@@ -332,6 +338,7 @@ function editProgram(existing) {
             style="background:linear-gradient(160deg,${c[0]},${c[1]})" aria-label="Couleur ${i + 1}"></button>`).join("")}
        </div>
        <p class="block-key">Exercices</p>
+       <p class="fineprint" style="margin:-4px 0 10px">Glisse la poignée à droite pour changer l'ordre.</p>
        <div id="draft-list" class="draft-list"></div>
        <button class="tile-btn" id="add-ex">
          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter un exercice
@@ -358,6 +365,9 @@ function editProgram(existing) {
             <span class="ex-title">${esc(e.name)}</span>
             <span class="ex-sub">${[e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre"}</span>
           </span>
+          <span class="drag-handle" role="button" tabindex="0" aria-label="Déplacer ${esc(e.name)}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14M5 15h14"/></svg>
+          </span>
         </div>
       </div>`).join("");
     host.querySelectorAll(".swipe-row").forEach((row) => {
@@ -365,6 +375,26 @@ function editProgram(existing) {
         draft.exercises.splice(Number(row.dataset.i), 1);
         drawDraft();
       } });
+    });
+
+    /* Glisser la poignée réordonne ; le clavier aussi, sinon
+       l'ordre ne serait accessible qu'au doigt. */
+    dragToReorder(host, { onCommit: (from, to) => {
+      draft.exercises.splice(to, 0, draft.exercises.splice(from, 1)[0]);
+      drawDraft();
+    } });
+    host.querySelectorAll(".drag-handle").forEach((h, i) => {
+      h.addEventListener("keydown", (ev) => {
+        const d = ev.key === "ArrowUp" ? -1 : ev.key === "ArrowDown" ? 1 : 0;
+        if (!d) return;
+        const to = i + d;
+        if (to < 0 || to >= draft.exercises.length) return;
+        ev.preventDefault();
+        draft.exercises.splice(to, 0, draft.exercises.splice(i, 1)[0]);
+        buzz(8);
+        drawDraft();
+        host.querySelectorAll(".drag-handle")[to].focus();
+      });
     });
   };
   drawDraft();
@@ -454,21 +484,170 @@ function prettyDay(dateStr) {
   return `${j.charAt(0).toUpperCase()}${j.slice(1)} ${d.getDate()} ${MOIS_L[d.getMonth()]}`;
 }
 
+/* ── Calendrier mensuel ────────────────────────────────────
+   L'historique se lit mois par mois : le calendrier navigue,
+   la liste dessous suit. Une case pleine = une séance ce
+   jour-là ; toucher la case isole la journée. */
+const MOIS_C = ["janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+let calY = new Date().getFullYear(), calM = new Date().getMonth();
+let calDay = null;                     /* jour isolé, ou null */
+
+const monthKey = (y, m) => `${y}-${String(m + 1).padStart(2, "0")}`;
+/* Date relue à chaque fois : une PWA reste ouverte des semaines. */
+function isFutureMonth(y, m) {
+  const n = new Date();
+  return y > n.getFullYear() || (y === n.getFullYear() && m > n.getMonth());
+}
+/* Après une séance ou un import, on revient sur le mois en cours :
+   sinon la nouvelle entrée s'écrirait dans un mois qu'on ne
+   regarde pas. */
+function calToNow() {
+  const n = new Date();
+  calY = n.getFullYear(); calM = n.getMonth(); calDay = null;
+}
+
+/* Toutes les entrées d'un mois, du plus récent au plus ancien. */
+const logsOfMonth = (y, m) => DB.logs
+  .filter((l) => l.date.startsWith(monthKey(y, m)))
+  .sort((a, b) => b.createdAt - a.createdAt);
+
+function renderCalendar() {
+  const key = monthKey(calY, calM);
+  const mLogs = logsOfMonth(calY, calM);
+  const days = new Set(mLogs.map((l) => l.date));
+  const vol = mLogs.reduce((n, l) => n + volumeOf(l), 0);
+
+  $("cal-title").textContent = `${MOIS_C[calM]} ${calY}`;
+  $("cal-sum").textContent = days.size
+    ? `${days.size} séance${days.size > 1 ? "s" : ""} · ${Math.round(vol).toLocaleString("fr-CA")} lb`
+    : "aucune séance ce mois-ci";
+  $("cal-next").disabled = isFutureMonth(calY, calM + 1);
+
+  /* Grille lundi → dimanche. On ne dessine que les semaines que
+     le mois touche vraiment : une sixième rangée vide mangerait
+     un tiers de l'écran pour rien. */
+  const first = new Date(calY, calM, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const start = new Date(calY, calM, 1 - lead);
+  const nDays = new Date(calY, calM + 1, 0).getDate();
+  const cells = Math.ceil((lead + nDays) / 7) * 7;
+  const tIso = today();
+
+  let html = "";
+  for (let i = 0; i < cells; i++) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    const key2 = iso(d);
+    const out = d.getMonth() !== calM;
+    const on = days.has(key2);
+    html += `<button type="button" class="cal-day${out ? " out" : ""}${on ? " on" : ""}` +
+      `${key2 === tIso && !out ? " today" : ""}${key2 === calDay ? " sel" : ""}" data-day="${key2}"` +
+      `${on ? "" : " tabindex=\"-1\" aria-disabled=\"true\""}>${d.getDate()}</button>`;
+  }
+  $("cal-grid").innerHTML = html;
+  $("cal-clear").hidden = !calDay;
+
+  $("cal-grid").querySelectorAll(".cal-day").forEach((b) => {
+    b.addEventListener("click", () => {
+      if (!b.classList.contains("on")) return;
+      calDay = calDay === b.dataset.day ? null : b.dataset.day;
+      buzz(8);
+      renderHistory();
+    });
+  });
+  return key;
+}
+
+/* Changement de mois : le contenu entre du côté d'où vient le
+   geste, avec un ressort qui repart de la vitesse du doigt. */
+const calSlide = new Spring(0, { response: 0.42, damping: 0.88, restDelta: 0.4,
+  onUpdate: (x) => {
+    const el = $("cal-slide");
+    el.style.transform = `translate3d(${x}px,0,0)`;
+    el.style.opacity = String(Math.max(0.35, 1 - Math.abs(x) / 260));
+  } });
+
+function goMonth(delta, velocity = 0) {
+  const y = calY, m = calM + delta;
+  if (isFutureMonth(y, m)) { calSlide.to(0, { velocity, damping: 1, response: 0.34 }); return; }
+  const d = new Date(y, m, 1);
+  calY = d.getFullYear(); calM = d.getMonth();
+  calDay = null;
+  renderHistory();
+  const w = $("cal-viewport").clientWidth || 300;
+  calSlide.hold(delta > 0 ? w * 0.3 : -w * 0.3);
+  calSlide.to(0, { velocity, damping: 0.86, response: 0.44 });
+  buzz(7);
+}
+
+/* Glissé horizontal sur le calendrier. Il résiste au lieu de
+   suivre au pixel : la page ne part pas, elle annonce qu'il y a
+   un mois de l'autre côté, et le relâchement décide. */
+function initCalendarGestures() {
+  const vp = $("cal-viewport");
+  let g = null;
+  vp.addEventListener("pointerdown", (e) => {
+    g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null, tr: tracker() };
+    g.tr.add(e.clientX, e.timeStamp);
+  });
+  vp.addEventListener("pointermove", (e) => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+    if (!g.axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dx) <= Math.abs(dy)) { g = null; return; }
+      g.axis = "x";
+      capture(vp, e.pointerId);
+    }
+    g.tr.add(e.clientX, e.timeStamp);
+    calSlide.hold(rubberband(dx, vp.clientWidth || 300, 0.42));
+  });
+  const end = (e) => {
+    if (!g || e.pointerId !== g.id) return;
+    const armed = g.axis === "x", v = g.tr.velocity();
+    g = null;
+    uncapture(vp, e.pointerId);
+    if (!armed) return;
+    const projected = calSlide.x + project(v, 0.99);
+    if (projected < -46) goMonth(1, v);
+    else if (projected > 46) goMonth(-1, v);
+    else calSlide.to(0, { velocity: v, damping: 1, response: 0.34 });
+  };
+  vp.addEventListener("pointerup", end);
+  vp.addEventListener("pointercancel", end);
+
+  $("cal-prev").addEventListener("click", () => goMonth(-1));
+  $("cal-next").addEventListener("click", () => goMonth(1));
+  $("cal-clear").addEventListener("click", () => { calDay = null; buzz(6); renderHistory(); });
+}
+
 function renderHistory() {
   const host = $("log-list");
-  const logs = [...DB.logs].sort((a, b) => b.createdAt - a.createdAt);
-
-  const week = logs.filter((l) => Date.now() - l.createdAt < 7 * 86400000);
-  $("hist-sub").textContent = logs.length
-    ? `${week.length} entrée${week.length > 1 ? "s" : ""} cette semaine · ${logs.length} au total`
+  const all = DB.logs;
+  const week = all.filter((l) => Date.now() - l.createdAt < 7 * 86400000);
+  $("hist-sub").textContent = all.length
+    ? `${week.length} entrée${week.length > 1 ? "s" : ""} cette semaine · ${all.length} au total`
     : "";
 
+  renderCalendar();
+
+  /* La liste suit le calendrier : le mois affiché, ou la seule
+     journée choisie. */
+  const logs = calDay
+    ? all.filter((l) => l.date === calDay).sort((a, b) => b.createdAt - a.createdAt)
+    : logsOfMonth(calY, calM);
+
   if (!logs.length) {
-    host.innerHTML =
-      `<div class="empty">
-         <p class="empty-title">Historique vide</p>
-         <p class="empty-body">Lance une séance depuis Programmes, ajoute une entrée à la main, ou importe tes données depuis les Réglages.</p>
-       </div>`;
+    host.innerHTML = all.length
+      ? `<div class="empty">
+           <p class="empty-title">Rien en ${esc(MOIS_C[calM])}</p>
+           <p class="empty-body">Glisse le calendrier ou touche les flèches pour changer de mois.</p>
+         </div>`
+      : `<div class="empty">
+           <p class="empty-title">Historique vide</p>
+           <p class="empty-body">Lance une séance depuis Programmes, ajoute une entrée à la main, ou importe tes données depuis les Réglages.</p>
+         </div>`;
     return;
   }
 
@@ -548,6 +727,7 @@ function quickLogSheet(picked = "") {
     const res = addLog({ exercise: picked, weight: w, sets: st, reps: r, programId: null, programName: null });
     closeSheet();
     onSheetClose = () => {
+      calToNow();
       renderHistory(); renderProgress(); renderPrograms();
       if (res.pr) { toast(`🏆 Record : ${fmt(w)} lb`); buzz([14, 45, 22]); }
       else { toast("Entrée ajoutée"); buzz(9); }
@@ -602,7 +782,7 @@ function renderExerciseProgress() {
     <div class="stat"><span class="stat-val tnum">${delta > 0 ? "+" : ""}${fmt(delta)}</span><span class="stat-key">Depuis le début</span></div>` : "";
 
   renderChart($("ex-chart"), pts, {
-    unit, color: "#30D158", prSet: metric === "weight" ? prSet : new Set(),
+    unit, prSet: metric === "weight" ? prSet : new Set(),
     label: `Progression — ${currentEx}`,
     empty: "Aucune donnée pour cet exercice.",
   });
@@ -690,7 +870,25 @@ function renderSettings() {
     $("import-old-btn").hidden = false;
   }
   card.hidden = false;
+  renderAppearance();
   $("version-line").textContent = `${DB.logs.length} entrées · ${DB.programs.length} programmes`;
+}
+
+/* ── Apparence : mode et accent ───────────────────────────── */
+const CHECK_PATH = '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>';
+
+function renderAppearance() {
+  $("theme-mode").querySelectorAll("button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.mode === themeMode));
+
+  $("accent-grid").innerHTML = ACCENT_CHOICES.map((a) => {
+    const on = a.id === accentId;
+    return `<button type="button" class="sw${on ? " on" : ""}" data-accent="${a.id}"
+        style="background:${a.hex};color:${a.ink}" aria-pressed="${on}"
+        aria-label="${esc(a.name)}">${on ? CHECK_PATH : ""}</button>`;
+  }).join("");
+
+  $("accent-name").innerHTML = `Accent : <b>${esc(currentAccent().name)}</b>`;
 }
 
 function manageExercisesSheet() {
@@ -750,6 +948,7 @@ function confirmSheet(title, body, cta, onYes) {
 
 /* ── Rafraîchit tout ce qui est visible ───────────────────── */
 function refreshAll() {
+  calToNow();
   renderPrograms();
   renderHistory();
   renderProgress();

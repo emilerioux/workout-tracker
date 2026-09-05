@@ -39,7 +39,14 @@ function niceScale(min, max, ticks = 4) {
    opts: { unit, color, prSet: Set(x), empty } */
 function renderChart(host, points, opts = {}) {
   const unit = opts.unit || "";
-  const color = opts.color || "#30D158";
+  /* Les couleurs viennent des tokens : le SVG ne les hérite pas,
+     il faut les lire à chaque tracé (thème clair, accent choisi). */
+  const color = opts.color || tok("--accent", "#30D158");
+  const cGrid = tok("--grid", "rgba(255,255,255,.07)");
+  const cSoft = tok("--tx-3", "rgba(242,243,245,.42)");
+  const cText = tok("--tx", "#F2F3F5");
+  const cSurf = tok("--elev", "#0F1115");
+  const cLine = tok("--line-hi", "rgba(255,255,255,.28)");
   const prSet = opts.prSet || new Set();
   host.innerHTML = "";
 
@@ -86,9 +93,9 @@ function renderChart(host, points, opts = {}) {
     const y = sy(t);
     if (y < M.t - 1 || y > M.t + ih + 1) return;
     svg.append(el("line", { x1: M.l, y1: y, x2: M.l + iw, y2: y,
-      stroke: "rgba(255,255,255,.07)", "stroke-width": 1 }));
+      stroke: cGrid, "stroke-width": 1 }));
     const lab = el("text", { x: M.l - 8, y: y + 3.5, "text-anchor": "end",
-      fill: "rgba(242,243,245,.42)", "font-size": "10.5", "font-weight": "500" });
+      fill: cSoft, "font-size": "10.5", "font-weight": "500" });
     lab.textContent = fmt(t);
     svg.append(lab);
   });
@@ -110,7 +117,7 @@ function renderChart(host, points, opts = {}) {
         stroke: color, "stroke-width": 2, opacity: ".55" }));
     }
     svg.append(el("circle", { cx, cy, r: isPR ? 4.6 : 3.4, fill: color,
-      stroke: "#0F1115", "stroke-width": 2 }));
+      stroke: cSurf, "stroke-width": 2 }));
   });
 
   /* Dernière valeur étiquetée en clair — jamais toutes. */
@@ -119,7 +126,7 @@ function renderChart(host, points, opts = {}) {
   const tag = el("text", {
     x: Math.min(lx + 9, M.l + iw), y: Math.max(ly - 10, M.t + 9),
     "text-anchor": lx > M.l + iw - 46 ? "end" : "start",
-    fill: "#F2F3F5", "font-size": "12.5", "font-weight": "650",
+    fill: cText, "font-size": "12.5", "font-weight": "650",
   });
   tag.textContent = `${fmt(last.y)} ${unit}`.trim();
   svg.append(tag);
@@ -127,13 +134,13 @@ function renderChart(host, points, opts = {}) {
   /* dates aux extrémités */
   [[x0, "start", M.l], [x1, "end", M.l + iw]].forEach(([v, anchor, x]) => {
     const t = el("text", { x, y: H - 7, "text-anchor": anchor,
-      fill: "rgba(242,243,245,.42)", "font-size": "10.5" });
+      fill: cSoft, "font-size": "10.5" });
     t.textContent = shortDate(v);
     svg.append(t);
   });
 
   /* ── Couche de survol : viseur + infobulle ─────────────── */
-  const cross = el("line", { y1: M.t, y2: M.t + ih, stroke: "rgba(255,255,255,.28)",
+  const cross = el("line", { y1: M.t, y2: M.t + ih, stroke: cLine,
     "stroke-width": 1, opacity: "0" });
   const halo = el("circle", { r: 7, fill: "none", stroke: color, "stroke-width": 2, opacity: "0" });
   svg.append(cross, halo);
