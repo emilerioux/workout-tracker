@@ -138,9 +138,23 @@
 /* `hidden` doit l'emporter sur tout `display` déclaré plus bas —
    sinon un élément en display:flex reste affiché une fois caché. */
 [hidden] { display: none !important; }
-html, body { height: 100%; }
+/* Le document lui-même ne défile jamais et ne rebondit pas.
+   `overscroll-behavior` doit être posé sur <html> : c'est lui
+   l'élément de défilement, et le mettre seulement sur <body>
+   n'arrête rien sur iOS. Le corps est fixé au viewport, donc
+   la barre d'onglets ne peut plus partir avec un rebond de page
+   ni suivre l'apparition de la barre d'adresse. */
+html {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 
 body {
+  position: fixed;
+  inset: 0;
+  height: 100%;
+  overflow: hidden;
   margin: 0;
   background: var(--bg);
   color: var(--tx);
@@ -157,8 +171,8 @@ body {
 .app {
   position: relative;
   width: min(100%, 460px);
-  height: 100dvh;
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
   background: var(--bg);
   isolation: isolate;
@@ -217,6 +231,9 @@ body {
   letter-spacing: -.033em;
 }
 .big-sub { margin: 0 0 20px; font-size: .875rem; color: var(--tx-2); }
+/* Réglages n'a pas de sous-titre : sans ça, la première carte
+   collerait au grand titre. */
+.big-title + .card-surface { margin-top: 18px; }
 .big-sub:empty { margin-bottom: 10px; }
 
 .block-key {

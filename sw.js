@@ -7,21 +7,21 @@
 
    Bumper la VERSION à CHAQUE déploiement, sinon le téléphone continue
    de servir la version précédente. */
-const VERSION = "v12";
+const VERSION = "v13";
 const SCOPE = new URL("./", self.location).pathname;   // ex. "/reps/"
 const CACHE_NAME = `reps-${VERSION}${SCOPE}`;
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css?v=10",
-  "./js/theme.js?v=10",
-  "./js/motion.js?v=10",
-  "./js/data.js?v=10",
-  "./js/chart.js?v=10",
-  "./js/session.js?v=10",
-  "./js/views.js?v=10",
-  "./js/app.js?v=10",
+  "./style.css?v=11",
+  "./js/theme.js?v=11",
+  "./js/motion.js?v=11",
+  "./js/data.js?v=11",
+  "./js/chart.js?v=11",
+  "./js/session.js?v=11",
+  "./js/views.js?v=11",
+  "./js/app.js?v=11",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
