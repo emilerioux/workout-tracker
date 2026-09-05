@@ -202,7 +202,28 @@ js/chart.js     graphiques SVG mono-série avec viseur et infobulle
 js/session.js   l'écran de séance
 js/views.js     les quatre onglets, navigation, feuilles, sélecteurs
 js/app.js       amorçage et câblage
+icons/icon.svg  la source de l'icône — les PNG en sont des rendus
 ```
+
+## L'icône
+
+Un haltère chargé, à plat et symétrique, sur un noir légèrement
+verdi. Le choix de la mise à plat est un choix de lisibilité : sur
+l'écran d'accueil l'icône fait 60 px, et à cette taille les trois
+barres horizontales d'avant se lisaient comme un menu hamburger.
+Tout est dessiné pour tenir jusqu'à 38 px — deux plaques par côté,
+pas quatre, et une ombre portée qui décolle les plaques de la barre.
+
+`icons/icon.svg` est la source ; les PNG (180, 192, 512) en sont des
+rendus. Le 512 maskable existe en double, motif à 76 %, parce
+qu'Android rogne dans un cercle inscrit et mangerait les colliers
+extérieurs.
+
+**La couleur est figée.** Elle ne suit pas l'accent des Réglages :
+iOS lit `apple-touch-icon` une seule fois, à l'ajout à l'écran
+d'accueil, et l'API qui change l'icône d'une app est réservée au
+natif. Changer de couleur veut dire regénérer les PNG, puis retirer
+et rajouter l'app à l'écran d'accueil.
 
 ## Pas encore fait
 

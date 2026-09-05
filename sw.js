@@ -7,25 +7,26 @@
 
    Bumper la VERSION à CHAQUE déploiement, sinon le téléphone continue
    de servir la version précédente. */
-const VERSION = "v18";
+const VERSION = "v19";
 const SCOPE = new URL("./", self.location).pathname;   // ex. "/reps/"
 const CACHE_NAME = `reps-${VERSION}${SCOPE}`;
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css?v=16",
-  "./js/theme.js?v=16",
-  "./js/motion.js?v=16",
-  "./js/data.js?v=16",
-  "./js/chart.js?v=16",
-  "./js/session.js?v=16",
-  "./js/views.js?v=16",
-  "./js/app.js?v=16",
+  "./style.css?v=17",
+  "./js/theme.js?v=17",
+  "./js/motion.js?v=17",
+  "./js/data.js?v=17",
+  "./js/chart.js?v=17",
+  "./js/session.js?v=17",
+  "./js/views.js?v=17",
+  "./js/app.js?v=17",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-180.png",
+  "./icons/icon-512-maskable.png",
 ];
 
 self.addEventListener("install", (e) => {
