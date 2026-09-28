@@ -113,6 +113,14 @@ function initApp() {
   $("ex-picker-btn").addEventListener("click", () => {
     pickExercise(currentEx, (n) => { currentEx = n; renderExerciseProgress(); }, { create: false });
   });
+  $("ex-hist-btn").addEventListener("click", () => { if (currentEx) exerciseHistorySheet(currentEx); });
+  $("muscle-span").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-span]");
+    if (!b) return;
+    muscleSpan = Number(b.dataset.span);
+    buzz(6);
+    renderMuscles();
+  });
   $("ex-table-btn").addEventListener("click", () => {
     const t = $("ex-table"), open = t.hidden;
     t.hidden = !open;
@@ -183,7 +191,7 @@ function initApp() {
 
   /* Réglages */
   $("import-old-btn").addEventListener("click", importSheet);
-  $("export-btn").addEventListener("click", () => { exportJSON(); toast("Fichier exporté"); });
+  $("export-btn").addEventListener("click", () => { exportJSON(); toast("Fichier exporté"); renderSettings(); renderBackup(); });
   $("import-file").addEventListener("change", (e) => {
     const f = e.target.files[0];
     e.target.value = "";

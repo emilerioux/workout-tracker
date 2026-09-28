@@ -1201,5 +1201,133 @@ label.block-key { display: block; }
 /* Le maillon des supersets (plus haut) a repris le nom `.link-btn`
    du lien texte « Voir les valeurs » et lui imposait 32 px de large :
    le lien s'empilait sur trois lignes. On lui rend sa forme. */
-#ex-table-btn { display: inline-block; width: auto; height: auto; padding: 12px 2px; margin: 0; border-radius: 0; }
-#ex-table-btn:active { transform: none; }
+.chart-links .link-btn { display: inline-block; width: auto; height: auto; padding: 12px 2px; margin: 0; border-radius: 0; }
+.chart-links .link-btn:active { transform: none; }
+.chart-links { display: flex; gap: 20px; flex-wrap: wrap; }
+
+/* ════════════════════════════════════════════════════════════
+   BILAN, SAUVEGARDE, PROGRESSION, MUSCLES, HISTORIQUE D'EXERCICE
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Bilan de la semaine (Programmes) ── */
+.week-card { padding: 16px 14px 2px; margin-bottom: 18px; }
+.week-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 2px 12px; }
+.week-head h3 { margin: 0; }
+.week-range { font-size: .75rem; color: var(--tx-3); }
+.week-card .stat { background: var(--glass); }
+/* Le delta reste en encre neutre : un « −2 » n'est pas une faute. */
+.stat-delta { font-size: .625rem; line-height: 1.3; color: var(--tx-3); letter-spacing: .01em; }
+
+/* ── Rappel de sauvegarde ── */
+.backup-card {
+  padding: 15px 16px; margin-bottom: 14px;
+  border-color: color-mix(in srgb, var(--orange) 34%, transparent);
+  background: color-mix(in srgb, var(--orange) 8%, var(--glass));
+}
+.backup-k { margin: 0 0 4px; font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--orange-tx); }
+.backup-t { margin: 0 0 12px; font-size: .875rem; line-height: 1.45; color: var(--tx-2); }
+.backup-t b { color: var(--tx); font-weight: 600; }
+.backup-act { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Boutons pilule partagés par la bulle de progression et le rappel. */
+.nudge-yes, .nudge-no {
+  height: 36px; padding: 0 15px; border: 0; border-radius: 100px;
+  font: inherit; font-size: .8125rem; font-weight: 600; cursor: pointer;
+  transition: transform 90ms ease-out, background-color 100ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.nudge-yes { background: var(--accent); color: var(--accent-ink); }
+.nudge-no { background: var(--glass-2); color: var(--tx-2); }
+.nudge-yes:active, .nudge-no:active { transform: scale(.95); }
+
+/* ── Bulle de progression (séance) ── */
+.nudge {
+  display: grid; grid-template-columns: 30px 1fr; gap: 4px 11px;
+  padding: 13px 14px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  will-change: transform;
+}
+.nudge-ic {
+  grid-row: span 2; align-self: start;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+}
+.nudge-ic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.nudge-txt { display: flex; flex-direction: column; gap: 2px; font-size: .875rem; line-height: 1.35; color: var(--tx-2); }
+.nudge-txt b { font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: var(--accent-tx); }
+.nudge-txt em { font-style: normal; font-weight: 650; color: var(--tx); }
+.nudge-act { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+
+/* ── Historique d'un exercice ── */
+.hist-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.hist-item { padding: 12px 14px; border-radius: var(--r-md); background: var(--glass); }
+.hist-head { margin: 0 0 7px; display: flex; align-items: baseline; gap: 8px; font-size: .8125rem; }
+.hist-head b { font-weight: 600; }
+.hist-head em { font-style: normal; font-size: .6875rem; color: var(--tx-3); }
+.hist-head span { margin-left: auto; font-weight: 600; color: var(--tx-2); }
+.hist-sets { margin: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.hist-set { padding: 4px 9px; border-radius: 8px; background: var(--glass-2); font-size: .8125rem; font-weight: 550; }
+.hist-set i { font-style: normal; color: var(--tx-3); margin: 0 2px; }
+/* Record : anneau, pas une deuxième couleur de remplissage. */
+.hist-set.pr { box-shadow: inset 0 0 0 1.5px var(--orange); }
+
+/* ── Corriger une entrée ── */
+.log-row { cursor: pointer; }
+.edit-sets { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.edit-set { display: grid; grid-template-columns: 18px 1fr auto 1fr 36px; align-items: center; gap: 7px; }
+.edit-idx { font-size: .75rem; font-weight: 600; color: var(--tx-3); text-align: center; font-variant-numeric: tabular-nums; }
+.edit-in {
+  display: flex; align-items: baseline; gap: 5px; min-width: 0;
+  padding: 9px 11px; border-radius: 12px; background: var(--glass);
+  border: 1px solid transparent;
+}
+.edit-in:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--glass-2); }
+.edit-in input {
+  flex: 1 1 auto; min-width: 0; width: 100%; border: 0; outline: 0; background: none; padding: 0;
+  color: var(--tx); font: inherit; font-size: 1.0625rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+.edit-in input::-webkit-inner-spin-button, .edit-in input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.edit-in em { font-style: normal; font-size: .6875rem; color: var(--tx-3); }
+.edit-del { width: 36px; height: 36px; }
+.edit-sets + .tile-btn { margin-bottom: 18px; }
+
+/* ── Séries par muscle ── */
+.muscle-card { padding: 16px; margin: 14px 0 0; }
+.muscle-sum { margin: 0 0 12px; font-size: .8125rem; color: var(--tx-2); }
+.muscle-sum b { color: var(--tx); font-weight: 650; }
+.mbars { display: flex; flex-direction: column; gap: 2px; }
+.mbar {
+  display: grid; grid-template-columns: 76px 1fr 64px; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 4px; margin: 0 -4px; box-sizing: content-box;
+  border: 0; border-radius: 10px; background: none;
+  color: var(--tx); font: inherit; text-align: left; cursor: pointer;
+  transition: background-color 100ms ease-out;
+}
+.mbar:active { background: var(--glass); }
+.mbar-name { font-size: .8125rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mbar-track { height: 10px; border-radius: 0 4px 4px 0; background: var(--grid); overflow: hidden; }
+.mbar-fill { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--accent); }
+.mbar-val { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.mbar-val b { font-size: .9375rem; font-weight: 650; }
+.mbar-val i { font-style: normal; font-size: .625rem; color: var(--tx-3); white-space: nowrap; }
+.mbar.zero .mbar-name, .mbar.zero .mbar-val b { color: var(--tx-3); }
+
+/* ── Pastilles (choix du muscle) ── */
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+.chip {
+  height: 36px; padding: 0 14px; border-radius: 100px;
+  border: 1px solid var(--line); background: var(--glass); color: var(--tx-2);
+  font: inherit; font-size: .8125rem; font-weight: 550; cursor: pointer;
+  transition: background-color 100ms ease-out, color 100ms ease-out;
+  will-change: transform;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.week-card { padding-bottom: 12px; }
+.week-card .stat-row { margin-bottom: 10px; }
+.stat-delta { font-size: .75rem; font-weight: 600; color: var(--tx-2); }
+.week-foot { margin: 0 2px; font-size: .6875rem; color: var(--tx-3); }
+.hist-pr { margin-left: 6px; font-size: .5625rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--orange-tx); vertical-align: 1px; }

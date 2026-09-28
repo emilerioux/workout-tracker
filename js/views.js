@@ -300,7 +300,71 @@ function pickExercise(current, onPick, { create = true } = {}) {
 /* ══════════════════════════════════════════════════════════
    ONGLET 1 — PROGRAMMES
    ══════════════════════════════════════════════════════════ */
+/* ── Bilan de la semaine ───────────────────────────────────
+   Lundi → aujourd'hui, comparé à la semaine d'avant ENTIÈRE. Le
+   delta dit « où j'en suis par rapport à la dernière fois », pas
+   un jugement : il reste en encre neutre, jamais en rouge. */
+function renderWeek() {
+  const host = $("week-card");
+  if (!DB.logs.length) { host.innerHTML = ""; return; }
+  const a = weekStats(0), b = weekStats(-1);
+  const delta = (x, y, f = (v) => Math.round(v).toLocaleString("fr-CA")) => {
+    const d = x - y;
+    if (!y && !x) return "";
+    if (!d) return "=";
+    return `${d > 0 ? "+" : "−"}${f(Math.abs(d))}`;
+  };
+  const tile = (val, key, d) =>
+    `<div class="stat"><span class="stat-val tnum">${val}</span><span class="stat-key">${key}</span>${d ? `<span class="stat-delta tnum">${d}</span>` : ""}</div>`;
+  host.innerHTML =
+    `<section class="card-surface week-card" aria-label="Bilan de la semaine">
+       <header class="week-head"><h3>Cette semaine</h3><span class="week-range">${esc(weekRange())}</span></header>
+       <div class="stat-row">
+         ${tile(a.sessions, `Séance${a.sessions > 1 ? "s" : ""}`, delta(a.sessions, b.sessions))}
+         ${tile(a.volume >= 10000 ? `${fmt(a.volume / 1000)}k` : Math.round(a.volume).toLocaleString("fr-CA"), "Volume (lb)",
+           delta(a.volume, b.volume, (v) => (v >= 10000 ? `${fmt(v / 1000)}k` : Math.round(v).toLocaleString("fr-CA"))))}
+         ${tile(fmt(a.cardio), "Cardio (min)", delta(a.cardio, b.cardio))}
+       </div>
+       <p class="week-foot">Petit chiffre : écart avec la semaine passée.</p>
+     </section>`;
+}
+function weekRange() {
+  const m = mondayOf(), s = new Date(m); s.setDate(s.getDate() + 6);
+  const f = (d) => `${d.getDate()} ${MOIS_L[d.getMonth()]}`;
+  return m.getMonth() === s.getMonth() ? `${m.getDate()} – ${f(s)}` : `${f(m)} – ${f(s)}`;
+}
+
+/* ── Rappel de sauvegarde ─────────────────────────────────── */
+function renderBackup() {
+  const host = $("backup-card"), due = backupDue();
+  if (!due) { host.innerHTML = ""; return; }
+  host.innerHTML =
+    `<section class="card-surface backup-card" role="status">
+       <p class="backup-k">Sauvegarde</p>
+       <p class="backup-t">${due.never
+         ? "Tu n'as jamais exporté tes données. Elles vivent seulement dans ce téléphone."
+         : `Ta dernière sauvegarde date de <b>${due.days} jours</b>.`}</p>
+       <div class="backup-act">
+         <button type="button" class="nudge-yes" id="backup-now">Exporter maintenant</button>
+         <button type="button" class="nudge-no" id="backup-later">Plus tard</button>
+       </div>
+     </section>`;
+  $("backup-now").addEventListener("click", () => {
+    exportJSON();
+    buzz(9);
+    toast("Fichier exporté — garde-le dans Fichiers ou iCloud");
+    renderBackup(); renderSettings();
+  });
+  $("backup-later").addEventListener("click", () => {
+    try { localStorage.setItem(K.backupSnooze, String(Date.now() + 7 * 86400000)); } catch (_) {}
+    buzz(6);
+    renderBackup();
+  });
+}
+
 function renderPrograms() {
+  renderWeek();
+  renderBackup();
   const host = $("program-list");
   const n = streakWeeks();
   $("prog-sub").textContent = DB.programs.length
@@ -400,6 +464,7 @@ function showProgram(id) {
          }).join("")}
        </ol>
        <button class="primary big" id="start-session"><span class="primary-label">Commencer la séance</span></button>
+       <button class="ghost-btn" id="dup-prog">Dupliquer le programme</button>
        <button class="ghost-btn danger-btn" id="del-prog">Supprimer le programme</button>
      </div>`
   );
@@ -409,6 +474,23 @@ function showProgram(id) {
     setTimeout(() => startSession(p), 220);
   });
   $("edit-prog").addEventListener("click", () => { popView(); setTimeout(() => editProgram(p), 220); });
+  /* La copie est enregistrée tout de suite, puis ouverte dans
+     l'éditeur : on la renomme ou on l'ajuste dans la foulée. Elle
+     prend sa propre couleur, comme tout nouveau programme. */
+  $("dup-prog").addEventListener("click", () => {
+    const copy = {
+      id: uid(),
+      name: `${p.name} (copie)`,
+      accent: nextAccent(),
+      exercises: p.exercises.map((e) => ({ ...e })),
+    };
+    DB.programs.splice(DB.programs.indexOf(p) + 1, 0, copy);
+    persist.programs();
+    renderPrograms();
+    buzz(9);
+    popView();
+    setTimeout(() => { editProgram(copy); toast("Copie créée"); }, 220);
+  });
   $("del-prog").addEventListener("click", () => {
     confirmSheet(`Supprimer « ${p.name} » ?`, "L'historique des séances déjà faites est conservé.", "Supprimer", () => {
       DB.programs = DB.programs.filter((x) => x.id !== p.id);
@@ -908,8 +990,162 @@ function renderHistory() {
     } });
   });
 
+  /* Toucher une ligne la corrige. Une ligne glissée (bouton
+     supprimer visible) se referme d'abord : même geste qu'iOS. */
+  host.querySelectorAll(".swipe-row[data-log]").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (!e.target.closest(".swipe-surface")) return;
+      if (row._swipeOpen && row._swipeOpen()) { row._closeSwipe(); return; }
+      buzz(6);
+      editLogSheet(row.dataset.log);
+    });
+  });
+
   host.querySelectorAll(".day-note").forEach((b) => {
     b.addEventListener("click", () => journalSheet(b.dataset.note));
+  });
+}
+
+/* ── Historique d'un exercice ──────────────────────────────
+   Toutes les séances d'un exercice, série par série, de la plus
+   récente à la plus ancienne. Ouvrable en pleine séance (menu ⋯)
+   comme depuis Progrès. */
+const histCount = (name) => {
+  const n = DB.logs.filter((l) => l.exercise === name).length;
+  return n ? `${n} séance${n > 1 ? "s" : ""} enregistrée${n > 1 ? "s" : ""}` : "Aucune séance pour l'instant";
+};
+
+function exerciseHistorySheet(name) {
+  const logs = DB.logs.filter((l) => l.exercise === name).sort((a, b) => b.createdAt - a.createdAt);
+  const cardio = isCardio(name);
+  const pr = DB.prs[name];
+  /* L'anneau « record » ne marque QU'UNE série : la première fois
+     que ce poids a été atteint. Sur chaque série à égalité, il ne
+     voudrait plus rien dire. */
+  const topW = (l) => (l.perSet ? Math.max(...l.perSet.map((s) => s.weight)) : l.weight);
+  const prLog = pr ? logs.filter((l) => !cardioLog(l) && topW(l) === pr).sort((a, b) => a.createdAt - b.createdAt)[0] : null;
+  openSheet(
+    `<p class="sheet-kicker">${cardio ? "Cardio" : esc(muscleOf(name))} · ${histCount(name)}</p>
+     <h2 class="sheet-h">${esc(name)}</h2>
+     ${!cardio && pr ? `<p class="muted">Record : <b>${fmt(pr)} lb</b></p>` : ""}
+     ${logs.length ? `<ol class="hist-list">${logs.map((l) => {
+       const top = cardioLog(l) ? null : (l.perSet ? Math.max(...l.perSet.map((s) => s.weight)) : l.weight);
+       const sets = cardioLog(l)
+         ? `<span class="hist-set">${esc(cardioText(l))}</span>`
+         : (l.perSet || Array.from({ length: l.sets || 1 }, () => ({ weight: l.weight, reps: l.reps })))
+             .map((s, k, all) => {
+               const isPr = l === prLog && all.findIndex((x) => x.weight === pr) === k;
+               return `<span class="hist-set${isPr ? " pr" : ""}"${isPr ? ' title="Record"' : ""}>${fmt(s.weight)}<i>×</i>${s.reps}${isPr ? '<b class="hist-pr">record</b>' : ""}</span>`;
+             }).join("");
+       return `<li class="hist-item">
+         <p class="hist-head"><b>${esc(prettyDay(l.date))}</b>${l.programName ? `<em>${esc(l.programName)}</em>` : ""}
+           ${top != null ? `<span class="tnum">${fmt(top)} lb</span>` : ""}</p>
+         <p class="hist-sets tnum">${sets}</p>
+       </li>`;
+     }).join("")}</ol>` : `<p class="muted pad">Rien encore — la première séance s'écrira ici.</p>`}`
+  );
+}
+
+/* ── Corriger une entrée passée ────────────────────────────
+   Toucher une ligne de l'Historique. Série par série pour une
+   entrée de séance ; durée, distance, calories et intensité pour
+   un cardio. La date se corrige aussi. */
+function editLogSheet(id) {
+  const l = DB.logs.find((x) => x.id === id);
+  if (!l) return;
+  const cardio = cardioLog(l);
+  /* Une vieille entrée « 135 × 8 × 3 » s'édite série par série :
+     on la déplie, elle sera réécrite au format détaillé. */
+  let rows = cardio ? [] : (l.perSet
+    ? l.perSet.map((s) => ({ ...s }))
+    : Array.from({ length: l.sets || 1 }, () => ({ weight: l.weight, reps: l.reps })));
+  let intensity = l.intensity || 2;
+
+  const rowHTML = (s, i) => `
+    <div class="edit-set" data-i="${i}">
+      <span class="edit-idx">${i + 1}</span>
+      <label class="edit-in"><input type="number" inputmode="decimal" step="any" min="0" data-k="weight" value="${fmt(s.weight)}" aria-label="Poids série ${i + 1}"><em>lb</em></label>
+      <span class="times">×</span>
+      <label class="edit-in"><input type="number" inputmode="numeric" min="0" data-k="reps" value="${s.reps}" aria-label="Reps série ${i + 1}"><em>reps</em></label>
+      <button type="button" class="icon-btn edit-del" aria-label="Retirer la série ${i + 1}"${rows.length < 2 ? " disabled" : ""}>
+        <svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+    </div>`;
+
+  openSheet(
+    `<p class="sheet-kicker">Corriger l'entrée</p>
+     <h2 class="sheet-h">${esc(l.exercise)}</h2>
+     <div class="field"><label for="el-date">Date</label>
+       <input class="input" id="el-date" type="date" value="${esc(l.date)}" max="${today()}"></div>
+     ${cardio ? `
+       <div class="row3">
+         <div class="field"><label for="el-min">Durée (min)</label>
+           <input class="input" id="el-min" type="number" min="1" step="any" inputmode="decimal" value="${fmt(l.minutes)}"></div>
+         <div class="field"><label for="el-km">Distance (km)</label>
+           <input class="input" id="el-km" type="number" min="0" step="any" inputmode="decimal" value="${l.distance ? fmt(l.distance) : ""}" placeholder="—"></div>
+         <div class="field"><label for="el-cal">Calories</label>
+           <input class="input" id="el-cal" type="number" min="0" inputmode="numeric" value="${l.calories ? Math.round(l.calories) : ""}" placeholder="—"></div>
+       </div>
+       <p class="block-key">Intensité</p>
+       <div class="segmented" id="el-int">${[1, 2, 3].map((n) => `<button type="button" data-int="${n}" class="${n === intensity ? "on" : ""}">${INTENSITY[n]}</button>`).join("")}</div>`
+     : `<p class="block-key">Séries</p>
+        <div id="el-sets" class="edit-sets"></div>
+        <button type="button" class="tile-btn" id="el-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter une série</button>`}
+     <button class="primary" id="el-save"><span class="primary-label">Enregistrer</span></button>`
+  );
+
+  if (cardio) {
+    $("el-int").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-int]");
+      if (!b) return;
+      intensity = Number(b.dataset.int);
+      $("el-int").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      buzz(6);
+    });
+  } else {
+    /* Les valeurs tapées sont relues avant chaque redessin : sinon
+       ajouter une série effacerait ce qui vient d'être corrigé. */
+    const read = () => $("el-sets").querySelectorAll(".edit-set").forEach((r) => {
+      const s = rows[Number(r.dataset.i)];
+      r.querySelectorAll("input").forEach((inp) => { s[inp.dataset.k] = Number(inp.value.replace(",", ".")); });
+    });
+    const draw = () => {
+      $("el-sets").innerHTML = rows.map(rowHTML).join("");
+      $("el-sets").querySelectorAll(".edit-del").forEach((b) => b.addEventListener("click", () => {
+        read();
+        rows.splice(Number(b.closest(".edit-set").dataset.i), 1);
+        buzz(8); draw(); measureSheet();
+      }));
+    };
+    draw();
+    $("el-add").addEventListener("click", () => {
+      read();
+      rows.push({ ...rows[rows.length - 1] });
+      buzz(8); draw(); measureSheet();
+    });
+    $("el-save").addEventListener("pointerdown", read);
+  }
+
+  $("el-save").addEventListener("click", () => {
+    const date = $("el-date").value || l.date;
+    if (date > today()) { toast("La date ne peut pas être dans le futur"); return; }
+    let fields;
+    if (cardio) {
+      const num = (i) => { const v = Number($(i).value.replace(",", ".")); return v > 0 ? v : null; };
+      const minutes = num("el-min");
+      if (!minutes) { toast("Entre au moins une durée"); return; }
+      fields = { date, minutes, distance: num("el-km"), calories: num("el-cal"), intensity };
+    } else {
+      $("el-sets").querySelectorAll(".edit-set").forEach((r) => {
+        const s = rows[Number(r.dataset.i)];
+        r.querySelectorAll("input").forEach((inp) => { s[inp.dataset.k] = Number(inp.value.replace(",", ".")); });
+      });
+      if (rows.some((s) => !(s.weight >= 0) || !(s.reps >= 1))) { toast("Chaque série a besoin d'un poids et de reps"); return; }
+      const top = rows.reduce((a, b) => (b.weight > a.weight ? b : a));
+      fields = { date, perSet: rows, weight: top.weight, reps: top.reps, sets: rows.length };
+    }
+    editLog(id, fields);
+    closeSheet();
+    onSheetClose = () => { renderHistory(); renderProgress(); renderPrograms(); toast("Entrée corrigée"); buzz(9); };
   });
 }
 
@@ -1049,9 +1285,10 @@ function quickLogSheet(picked = "", kind = null) {
 let progMode = "exercices", currentEx = null, metric = "weight";
 
 function renderProgress() {
-  ["exercices", "poids", "photos"].forEach((m) => { $(`mode-${m}`).hidden = m !== progMode; });
+  ["exercices", "muscles", "poids", "photos"].forEach((m) => { $(`mode-${m}`).hidden = m !== progMode; });
   $("prog-mode").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === progMode));
   if (progMode === "exercices") renderExerciseProgress();
+  else if (progMode === "muscles") renderMuscles();
   else if (progMode === "poids") renderBodyweight();
   else renderPhotos();
 }
@@ -1110,6 +1347,97 @@ function renderExerciseProgress() {
   /* Vue tableau : l'information ne doit jamais exister qu'en image. */
   $("ex-table").innerHTML = pts.slice().reverse().map((p) =>
     `<div class="vrow"><span>${esc(longDate(p.x))}</span><b class="tnum">${fmt(p.y)} ${esc(unit)}</b>${prSet.has(p.x) && metric === "weight" ? '<em>record</em>' : ""}</div>`).join("");
+}
+
+/* ── Séries par muscle ─────────────────────────────────────
+   Une seule série de données → une seule couleur (l'accent),
+   comme les autres graphiques de l'app. Chaque barre porte son
+   chiffre en texte : pas besoin d'infobulle ni de légende. Les
+   muscles restent dans un ordre FIXE d'une semaine à l'autre, pour
+   qu'on compare les mêmes lignes ; un muscle à zéro reste visible,
+   c'est justement lui qu'on cherche. */
+let muscleSpan = 1;
+
+function renderMuscles() {
+  $("muscle-span").querySelectorAll("button").forEach((b) => b.classList.toggle("on", Number(b.dataset.span) === muscleSpan));
+  const cur = setsByMuscle(1 - muscleSpan, muscleSpan);
+  const prev = setsByMuscle(1 - 2 * muscleSpan, muscleSpan);
+  const shown = MUSCLES.filter((m) => m !== "Autre" || cur.Autre || prev.Autre);
+  const max = Math.max(1, ...shown.map((m) => cur[m]));
+  const total = shown.reduce((n, m) => n + cur[m], 0);
+  const label = muscleSpan === 1 ? "sem. dernière" : "4 sem. d'avant";
+
+  $("muscle-sum").innerHTML = total
+    ? `<b class="tnum">${total}</b> série${total > 1 ? "s" : ""} ${muscleSpan === 1 ? "cette semaine" : "sur 4 semaines"}`
+    : `Aucune série ${muscleSpan === 1 ? "cette semaine" : "sur 4 semaines"} pour l'instant.`;
+
+  $("muscle-bars").innerHTML = shown.map((m) => {
+    const v = cur[m], w = (v / max) * 100;
+    return `<button type="button" class="mbar${v ? "" : " zero"}" data-m="${esc(m)}"
+        aria-label="${esc(m)} : ${v} séries, ${prev[m]} la période d'avant">
+        <span class="mbar-name">${esc(m)}</span>
+        <span class="mbar-track"><span class="mbar-fill" style="width:${v ? Math.max(w, 3) : 0}%"></span></span>
+        <span class="mbar-val tnum"><b>${v}</b><i>${label} ${prev[m]}</i></span>
+      </button>`;
+  }).join("");
+
+  $("muscle-bars").querySelectorAll(".mbar").forEach((b) =>
+    b.addEventListener("click", () => muscleSheet(b.dataset.m)));
+}
+
+/* Les exercices rangés sous un muscle, pour vérifier ou corriger
+   la devinette. */
+function muscleSheet(m) {
+  const names = allExercises().filter((n) => !isCardio(n) && muscleOf(n) === m);
+  openSheet(
+    `<p class="sheet-kicker">Muscle</p>
+     <h2 class="sheet-h">${esc(m)}</h2>
+     <p class="muted">Le muscle est deviné d'après le nom de l'exercice. Touche un exercice s'il est mal rangé.</p>
+     <div class="pick-list">${names.length ? names.map((n) => `
+       <button type="button" class="pick-row" data-name="${esc(n)}">
+         <span>${esc(n)}<em class="pick-sub">${DB.muscles[n] ? "choisi à la main" : "deviné"}</em></span>
+         <svg viewBox="0 0 24 24" class="tick"><path d="m9 6 6 6-6 6"/></svg></button>`).join("")
+       : `<p class="muted pad">Aucun exercice rangé ici.</p>`}</div>`
+  );
+  $("sheet-body").querySelectorAll("[data-name]").forEach((b) => b.addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => muscleChooser(b.dataset.name, () => renderMuscles());
+  }));
+}
+
+/* Choisir le muscle d'un exercice — en pastilles, d'un seul tap. */
+function muscleChips(name) {
+  const cur = muscleOf(name);
+  return `<div class="chips" id="muscle-chips" role="radiogroup" aria-label="Muscle principal">${MUSCLES.map((m) =>
+    `<button type="button" class="chip${m === cur ? " on" : ""}" data-m="${esc(m)}" role="radio" aria-checked="${m === cur}">${esc(m)}</button>`).join("")}</div>`;
+}
+function bindMuscleChips(onPick) {
+  $("muscle-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-m]");
+    if (!b) return;
+    $("muscle-chips").querySelectorAll(".chip").forEach((x) => {
+      x.classList.toggle("on", x === b); x.setAttribute("aria-checked", String(x === b));
+    });
+    pop(b, 1.1, 0.6);
+    buzz(6);
+    onPick(b.dataset.m);
+  });
+}
+function setMuscle(name, m) {
+  if (m === guessMuscle(name)) delete DB.muscles[name]; else DB.muscles[name] = m;
+  persist.muscles();
+}
+
+function muscleChooser(name, after) {
+  openSheet(
+    `<p class="sheet-kicker">Muscle principal</p>
+     <h2 class="sheet-h">${esc(name)}</h2>
+     ${muscleChips(name)}`
+  );
+  bindMuscleChips((m) => {
+    setMuscle(name, m);
+    setTimeout(() => { closeSheet(); onSheetClose = () => { if (after) after(); toast(`${name} → ${m}`); }; }, 220);
+  });
 }
 
 function renderCardioProgress() {
@@ -1205,6 +1533,10 @@ function renderSettings() {
     ? `<b>${total}</b> élément${total > 1 ? "s" : ""} de <b>Mes Workouts</b> attendent encore sur cet appareil.`
     : `Rien trouvé de <b>Mes Workouts</b> sur cet appareil.`;
   renderAppearance();
+  const last = Number(localStorage.getItem(K.lastExport)) || 0;
+  $("backup-line").textContent = last
+    ? `Dernière sauvegarde : ${relDay(iso(new Date(last)))}.`
+    : "Aucune sauvegarde pour l'instant.";
   $("version-line").textContent = `${DB.logs.length} entrées · ${DB.programs.length} programmes`;
 }
 
@@ -1291,13 +1623,17 @@ function editExerciseSheet(name) {
     `<h2 class="sheet-h">${esc(name)}</h2>
      <div class="field"><label for="ex-rename">Nom</label>
        <input class="input" id="ex-rename" value="${esc(name)}" autocomplete="off"></div>
+     ${isCardio(name) ? "" : `<p class="block-key">Muscle principal</p>${muscleChips(name)}`}
      <div class="field"><label for="ex-note">Note technique</label>
        <textarea class="input" id="ex-note" rows="3" placeholder="Ex : grip large, coudes serrés">${esc(DB.notes[name] || "")}</textarea></div>
      <p class="fineprint">Renommer met à jour l'historique, les programmes et les records d'un coup.</p>
      <button class="primary" id="ex-save"><span class="primary-label">Enregistrer</span></button>`
   );
+  let muscle = isCardio(name) ? null : muscleOf(name);
+  if (muscle) bindMuscleChips((m) => { muscle = m; });
   $("ex-save").addEventListener("click", () => {
     const nn = $("ex-rename").value.trim();
+    if (muscle) setMuscle(name, muscle);
     const note = $("ex-note").value.trim();
     if (!nn) { toast("Le nom ne peut pas être vide"); return; }
     if (nn !== name) renameExercise(name, nn);

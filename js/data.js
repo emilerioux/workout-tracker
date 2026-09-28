@@ -14,6 +14,9 @@ const K = {
   prs:       "wt2-prs",
   sessions:  "wt2-sessions",
   journal:   "wt2-journal",
+  muscles:   "wt2-muscles",
+  lastExport:"wt2-last-export",
+  backupSnooze: "wt2-backup-snooze",
   hint:     "wt2-hint-seen",
   accentFix: "wt2-accents-v1",
   groupFix: "wt2-groups-v1",
@@ -59,6 +62,9 @@ const DB = {
      programName, text }. Une par séance, pas par jour — deux
      séances le même jour gardent chacune la leur. */
   journal:    load(K.journal, []),
+  /* Muscle choisi à la main pour un exercice. Sans entrée ici,
+     le muscle est deviné d'après le nom (guessMuscle). */
+  muscles:    load(K.muscles, {}),
 };
 
 const persist = {
@@ -69,6 +75,7 @@ const persist = {
   prs:        () => save(K.prs, DB.prs),
   sessions:   () => save(K.sessions, DB.sessions),
   journal:    () => save(K.journal, DB.journal),
+  muscles:    () => save(K.muscles, DB.muscles),
 };
 
 /* ── Cardio ─────────────────────────────────────────────────
@@ -171,6 +178,83 @@ function streakWeeks() {
   return n;
 }
 
+/* ── Muscles ───────────────────────────────────────────────
+   Un muscle principal par exercice. Deviné d'après le nom (FR et
+   EN) ; l'ordre des règles compte : « leg curl » est une jambe
+   avant d'être un curl, « relevé de jambes » un abdo avant d'être
+   une jambe, « développé militaire » une épaule avant d'être un
+   développé. */
+const MUSCLES = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Jambes", "Abdos", "Autre"];
+const MUSCLE_RULES = [
+  ["Abdos",     /abdo|\babs?\b|crunch|plank|planche|gainage|core|releve de jambe|leg raise|russian twist|ab wheel/],
+  ["Jambes",    /squat|leg |leg$|jambe|presse|lunge|fente|hip thrust|mollet|calf|rdl|roumain|romanian|ischio|quadri|hack|adducteur|abducteur|fessier|glute|step.?up|bulgar/],
+  ["Épaules",   /militaire|overhead|ohp|shoulder|epaule|lateral|elevation|face pull|delt|arnold|oiseau|rear delt/],
+  ["Biceps",    /curl|biceps|marteau|hammer/],
+  ["Triceps",   /tricep|dips|pushdown|push.?down|skull|barre au front|extension|kickback|close.?grip/],
+  ["Pectoraux", /bench|couche|chest|pec|fly|ecarte|pompe|push.?up|incline|decline|developpe/],
+  ["Dos",       /row|rowing|tirage|pull|lat\b|lats|traction|deadlift|souleve de terre|chin|shrug|haussement|dos/],
+];
+const deaccent = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function guessMuscle(name) {
+  const n = deaccent(name || "");
+  for (const [m, re] of MUSCLE_RULES) if (re.test(n)) return m;
+  return "Autre";
+}
+const muscleOf = (name) => DB.muscles[name] || guessMuscle(name);
+
+/* Lundi 00:00 de la semaine qui contient `d`, décalé de `k` semaines. */
+function mondayOf(d = new Date(), k = 0) {
+  const m = new Date(d); m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7) + 7 * k);
+  return m;
+}
+const setsOf = (l) => cardioLog(l) ? 0 : (l.perSet ? l.perSet.length : Number(l.sets) || 0);
+
+/* Entrées dont la date tombe dans [lundi + 7·k, +7·n jours). */
+function logsInWeeks(k, n = 1) {
+  const from = iso(mondayOf(new Date(), k));
+  const end = mondayOf(new Date(), k); end.setDate(end.getDate() + 7 * n);
+  const to = iso(end);
+  return DB.logs.filter((l) => l.date >= from && l.date < to);
+}
+
+function weekStats(k = 0) {
+  const logs = logsInWeeks(k);
+  return {
+    sessions: new Set(logs.map((l) => l.date)).size,
+    volume: logs.reduce((n, l) => n + volumeOf(l), 0),
+    cardio: logs.reduce((n, l) => n + (cardioLog(l) ? Number(l.minutes) || 0 : 0), 0),
+    sets: logs.reduce((n, l) => n + setsOf(l), 0),
+  };
+}
+
+/* Séries par muscle sur `n` semaines finissant cette semaine
+   (k = 0) ou la précédente (k = -n). */
+function setsByMuscle(k, n) {
+  const out = Object.fromEntries(MUSCLES.map((m) => [m, 0]));
+  logsInWeeks(k, n).forEach((l) => { if (!cardioLog(l)) out[muscleOf(l.exercise)] += setsOf(l); });
+  return out;
+}
+
+/* ── Rappel de sauvegarde ──────────────────────────────────
+   Les données ne vivent QUE dans le téléphone. Au-delà de 30
+   jours sans export (ou jamais, une fois qu'il y a deux semaines
+   d'historique), on le rappelle. « Plus tard » repousse d'une
+   semaine. */
+function backupDue() {
+  if (DB.logs.length < 5) return null;
+  const now = Date.now(), DAY = 86400000;
+  const snooze = Number(localStorage.getItem(K.backupSnooze)) || 0;
+  if (snooze > now) return null;
+  const last = Number(localStorage.getItem(K.lastExport)) || 0;
+  if (last) {
+    const days = Math.floor((now - last) / DAY);
+    return days >= 30 ? { days, never: false } : null;
+  }
+  const first = Math.min(...DB.logs.map((l) => l.createdAt || now));
+  return now - first >= 14 * DAY ? { days: null, never: true } : null;
+}
+
 /* ── Écriture ─────────────────────────────────────────────── */
 
 /* Ajoute une entrée d'historique et met à jour le record.
@@ -217,6 +301,31 @@ function deleteLog(id) {
   persist.prs();
 }
 
+/* Corrige une entrée passée (Historique). Contrairement à
+   updateLog, le record peut aussi BAISSER : on le recalcule à
+   partir de tout l'historique. Changer la date déplace aussi le
+   jour d'entraînement dans le calendrier. */
+function editLog(id, fields) {
+  const l = DB.logs.find((x) => x.id === id);
+  if (!l) return null;
+  const oldDate = l.date;
+  Object.assign(l, fields);
+  if (!l.perSet) delete l.perSet;
+  persist.logs();
+
+  if (!cardioLog(l)) {
+    const best = bestWeight(l.exercise);
+    if (best > 0) DB.prs[l.exercise] = best; else delete DB.prs[l.exercise];
+    persist.prs();
+  }
+  if (l.date !== oldDate) {
+    if (!DB.sessions.includes(l.date)) DB.sessions.push(l.date);
+    if (!DB.logs.some((x) => x.date === oldDate)) DB.sessions = DB.sessions.filter((d) => d !== oldDate);
+    persist.sessions();
+  }
+  return l;
+}
+
 /* Renomme un exercice partout à la fois. */
 function renameExercise(from, to) {
   from = from.trim(); to = to.trim();
@@ -224,6 +333,7 @@ function renameExercise(from, to) {
   DB.logs.forEach((l) => { if (l.exercise === from) l.exercise = to; });
   DB.programs.forEach((p) => p.exercises.forEach((e) => { if (e.name === from) e.name = to; }));
   if (DB.notes[from] !== undefined) { DB.notes[to] = DB.notes[from]; delete DB.notes[from]; }
+  if (DB.muscles[from] !== undefined) { DB.muscles[to] = DB.muscles[from]; delete DB.muscles[from]; persist.muscles(); }
   if (DB.prs[from] !== undefined) {
     DB.prs[to] = Math.max(DB.prs[to] ?? 0, DB.prs[from]);
     delete DB.prs[from];
@@ -328,6 +438,7 @@ function exportJSON() {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `workouts-${today()}.json`;
+  try { localStorage.setItem(K.lastExport, String(Date.now())); } catch (_) {}
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
@@ -340,7 +451,7 @@ function importJSON(file, done) {
       const d = p.data || p;
       if (!d || typeof d !== "object") throw new Error("format");
       ["programs", "logs", "bodyweight", "sessions", "journal"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
-      ["notes", "prs"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
+      ["notes", "prs", "muscles"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
       Object.values(persist).forEach((f) => f());
       done(null);
     } catch (e) { done(e); }

@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -27,6 +27,8 @@
       <div class="page-scroll">
         <h1 class="big-title">Programmes</h1>
         <p class="big-sub" id="prog-sub"></p>
+        <div id="backup-card"></div>
+        <div id="week-card"></div>
         <div id="program-list" class="prog-list"></div>
         <button class="tile-btn" id="new-program-btn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -83,6 +85,7 @@
 
         <div class="segmented" id="prog-mode">
           <button type="button" data-mode="exercices" class="on">Exercices</button>
+          <button type="button" data-mode="muscles">Muscles</button>
           <button type="button" data-mode="poids">Poids</button>
           <button type="button" data-mode="photos">Photos</button>
         </div>
@@ -101,8 +104,24 @@
           <div class="card-surface">
             <div id="ex-chart" class="chart-host"></div>
           </div>
-          <button class="link-btn" id="ex-table-btn" aria-expanded="false">Voir les valeurs</button>
+          <div class="chart-links">
+            <button class="link-btn" id="ex-table-btn" aria-expanded="false">Voir les valeurs</button>
+            <button class="link-btn" id="ex-hist-btn">Toutes les séances</button>
+          </div>
           <div id="ex-table" class="value-table" hidden></div>
+        </div>
+
+        <!-- séries par muscle -->
+        <div id="mode-muscles" hidden>
+          <div class="segmented small" id="muscle-span">
+            <button type="button" data-span="1" class="on">Cette semaine</button>
+            <button type="button" data-span="4">4 semaines</button>
+          </div>
+          <div class="card-surface muscle-card">
+            <p class="muscle-sum" id="muscle-sum"></p>
+            <div class="mbars" id="muscle-bars"></div>
+          </div>
+          <p class="fineprint">Séries de musculation par muscle principal (le cardio n'y compte pas). Touche un muscle pour voir ou corriger ses exercices.</p>
         </div>
 
         <!-- poids corporel -->
@@ -152,7 +171,7 @@
 
         <div class="card-surface block">
           <h3>Sauvegarde</h3>
-          <p class="muted">Tes données vivent sur ce téléphone. Exporte-les de temps en temps.</p>
+          <p class="muted">Tes données vivent sur ce téléphone. Exporte-les de temps en temps. <span id="backup-line"></span></p>
           <button class="ghost-btn" id="export-btn">Exporter un fichier</button>
           <label class="ghost-btn" for="import-file">Importer un fichier</label>
           <input type="file" id="import-file" accept="application/json" hidden>
@@ -290,13 +309,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=19"></script>
-<script src="js/motion.js?v=19"></script>
-<script src="js/data.js?v=19"></script>
-<script src="js/chart.js?v=19"></script>
-<script src="js/session.js?v=19"></script>
-<script src="js/views.js?v=19"></script>
-<script src="js/app.js?v=19"></script>
+<script src="js/theme.js?v=20"></script>
+<script src="js/motion.js?v=20"></script>
+<script src="js/data.js?v=20"></script>
+<script src="js/chart.js?v=20"></script>
+<script src="js/session.js?v=20"></script>
+<script src="js/views.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

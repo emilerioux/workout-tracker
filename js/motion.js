@@ -157,6 +157,9 @@ function swipeToReveal(el, { width = 88, onCommit }) {
   const action = el.querySelector(".swipe-action");
   if (action) action.addEventListener("click", () => { buzz(12); onCommit(); });
   el._closeSwipe = () => { open = false; s.to(0); };
+  /* Un toucher sur une rangée ouverte la referme au lieu de
+     l'activer : il faut pouvoir le savoir de l'extérieur. */
+  el._swipeOpen = () => open || s.x > 4;
   return el._closeSwipe;
 }
 

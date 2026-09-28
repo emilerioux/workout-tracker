@@ -106,7 +106,23 @@ function initState(ex) {
       reps: lastTop ? lastTop.reps : (lw ? lw.reps : firstNum(ex.reps, 10)),
     },
     target: ex.sets || (lw ? lw.sets : 3),
+    nudge: plateauOf(ex.name),
   };
+}
+
+/* Même poids aux 3 dernières séances d'un exercice → on SUGGÈRE
+   d'en rajouter. Rien ne change tant qu'on ne touche pas
+   « Essayer » : le poids de départ reste celui de la dernière fois. */
+function plateauOf(name) {
+  const topOf = (l) => (l.perSet ? Math.max(...l.perSet.map((x) => x.weight)) : l.weight);
+  const last3 = DB.logs
+    .filter((l) => l.exercise === name && !cardioLog(l))
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 3);
+  if (last3.length < 3) return null;
+  const w = topOf(last3[0]);
+  if (!(w > 0) || !last3.every((l) => topOf(l) === w)) return null;
+  return { weight: w, next: w + (w >= 100 ? 5 : 2.5), n: 3 };
 }
 
 /* ── Ouverture ────────────────────────────────────────────── */
@@ -254,6 +270,7 @@ function activeCell(b) {
 function renderCard(b) {
   const blk = S.blocks[b], ol = S.cards[b].sets;
   ol.innerHTML = "";
+  blk.members.forEach((i) => { const n = nudgeRow(i, blk); if (n) ol.appendChild(n); });
   S.cards[b].el.classList.toggle("is-skipped", blk.members.every((i) => S.state[i].skipped));
 
   if (!blk.superset) {
@@ -282,6 +299,36 @@ function renderCard(b) {
     });
   }
   appendSkipped(ol, blk);
+}
+
+/* La bulle de progression : seulement avant la première série,
+   et une seule fois — « Pas aujourd'hui » la fait disparaître. */
+function nudgeRow(i, blk) {
+  const st = S.state[i], nd = st.nudge;
+  if (!nd || st.nudgeSeen || st.skipped || st.done.length) return null;
+  const li = document.createElement("li");
+  li.className = "nudge";
+  li.innerHTML =
+    `<span class="nudge-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>` +
+    `<span class="nudge-txt"><b>${nd.n} séances de suite à ${fmt(nd.weight)} lb${blk.superset ? ` · ${esc(S.exercises[i].name)}` : ""}</b>` +
+    `<span>Let's go — essaie <em>${fmt(nd.next)} lb</em> aujourd'hui ?</span></span>` +
+    `<span class="nudge-act"><button type="button" class="nudge-yes">Essayer ${fmt(nd.next)} lb</button>` +
+    `<button type="button" class="nudge-no">Pas aujourd'hui</button></span>`;
+  li.querySelector(".nudge-yes").addEventListener("click", () => {
+    st.draft.weight = nd.next;
+    st.nudgeSeen = true;
+    buzz([8, 30, 12]);
+    const b = S.blocks.indexOf(blk);
+    renderCard(b);
+    const num = S.cards[b].sets.querySelector(`.set.active[data-ex="${i}"] .num[data-k="weight"]`);
+    if (num) pop(num, 1.18, 0.55);
+  });
+  li.querySelector(".nudge-no").addEventListener("click", () => {
+    st.nudgeSeen = true;
+    buzz(6);
+    renderCard(S.blocks.indexOf(blk));
+  });
+  return li;
 }
 
 /* Un exercice passé laisse une ligne sur sa carte, avec de quoi
@@ -793,6 +840,7 @@ const MENU_IC = {
   skip: '<svg viewBox="0 0 24 24" class="tick"><path d="M6 5v14l9-7zM18 5v14"/></svg>',
   resume: '<svg viewBox="0 0 24 24" class="tick"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>',
   note: '<svg viewBox="0 0 24 24" class="tick"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></svg>',
+  hist: '<svg viewBox="0 0 24 24" class="tick"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></svg>',
   add: '<svg viewBox="0 0 24 24" class="tick"><path d="M12 5v14M5 12h14"/></svg>',
 };
 
@@ -825,6 +873,9 @@ function sessionMenu(focus) {
          <span>${st.skipped ? "Reprendre cet exercice" : "Passer cet exercice"}
            <em class="pick-sub">${st.skipped ? "Il revient dans la séance" : st.done.length ? "Les séries déjà faites sont gardées" : "Rien n'est écrit dans l'historique"}</em></span>
          ${st.skipped ? MENU_IC.resume : MENU_IC.skip}</button>
+       <button type="button" class="pick-row" id="sm-hist">
+         <span>Historique de cet exercice<em class="pick-sub">${histCount(ex.name)}</em></span>
+         ${MENU_IC.hist}</button>
        <button type="button" class="pick-row" id="sm-note">
          <span>Note technique<em class="pick-sub">${note ? esc(note) : "Aucune — elle s'affiche sur la carte à chaque séance"}</em></span>
          ${MENU_IC.note}</button>
@@ -880,6 +931,11 @@ function sessionMenu(focus) {
   $("sm-skip").addEventListener("click", () => {
     closeSheet();
     onSheetClose = () => toggleSkip(i);
+  });
+
+  $("sm-hist").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => exerciseHistorySheet(ex.name);
   });
 
   $("sm-note").addEventListener("click", () => {
