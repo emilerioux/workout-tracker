@@ -1093,3 +1093,113 @@ textarea.input { resize: vertical; line-height: 1.45; }
 }
 
 :focus-visible { outline: 2px solid var(--accent-tx); outline-offset: 2px; border-radius: 6px; }
+
+/* ════════════════════════════════════════════════════════════
+   SÉANCE MODIFIABLE, CARDIO, NOTES DE SÉANCE
+   ════════════════════════════════════════════════════════════ */
+
+/* En séance, la feuille générique (menu ⋯, sélecteur d'exercice)
+   doit passer AU-DESSUS de l'écran de séance, qui est à 70. */
+body.in-session #scrim { z-index: 75; }
+body.in-session #sheet { z-index: 76; }
+
+/* ── Menu ⋯ de la séance ── */
+.menu-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 18px; }
+.menu-list .pick-row .tick { color: var(--tx-3); }
+.pick-row.warn { color: var(--orange-tx); }
+.pick-row.warn .tick { color: var(--orange-tx); }
+.segmented.who { margin-bottom: 14px; }
+.segmented.who button { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; padding-right: 8px; }
+
+.stepper-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 10px 10px 14px; margin-bottom: 12px;
+  border-radius: var(--r-md); background: var(--glass);
+}
+.stepper-row > span { display: flex; flex-direction: column; gap: 2px; font-size: .9375rem; }
+.stepper-row > span b { font-weight: 600; }
+.stepper-row em { font-style: normal; font-size: .75rem; color: var(--tx-3); }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper button {
+  width: 44px; height: 40px; border: 0; border-radius: 11px;
+  background: var(--glass-2); color: var(--tx);
+  font: inherit; font-size: 1.25rem; font-weight: 500; line-height: 1; cursor: pointer;
+  transition: transform 90ms ease-out, background-color 100ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.stepper button:active { transform: scale(.92); background: var(--line-hi); }
+.stepper b { min-width: 34px; text-align: center; font-size: 1.25rem; font-weight: 650; letter-spacing: -.02em; display: inline-block; }
+
+/* ── Exercice passé ── */
+.card.is-skipped .card-inner > :not(.sets) { opacity: .45; }
+.skip-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--line-hi);
+  font-size: .8125rem; color: var(--tx-2);
+}
+.skip-txt b { font-weight: 600; color: var(--tx); }
+.skip-undo {
+  flex: none; height: 34px; padding: 0 14px;
+  border: 0; border-radius: 100px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-tx);
+  font: inherit; font-size: .8125rem; font-weight: 600; cursor: pointer;
+  transition: transform 90ms ease-out;
+}
+.skip-undo:active { transform: scale(.94); }
+
+/* ── Carte cardio ── */
+.cardio-form {
+  padding: 16px 14px 14px;
+  border-radius: var(--r-md);
+  background: var(--glass-2); border: 1px solid var(--line-hi); box-shadow: var(--sh-card);
+}
+.cf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cf { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cf.main { grid-column: 1 / -1; }
+.cf-key { font-size: .6875rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--tx-3); margin: 0; }
+.cf-in {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 8px 12px; border-radius: 12px;
+  background: var(--glass); border: 1px solid transparent;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+.cf-in:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--glass-2); }
+.cf-in input {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  border: 0; outline: 0; background: none; padding: 0;
+  color: var(--tx); font: inherit; font-size: 1.375rem; font-weight: 600;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+.cf.main .cf-in input { font-size: 2rem; letter-spacing: -.035em; }
+.cf-in input::placeholder { color: var(--tx-3); font-weight: 500; }
+.cf-in input::-webkit-inner-spin-button, .cf-in input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.cf-in em { font-style: normal; font-size: .8125rem; color: var(--tx-2); }
+.cf-int-key { margin: 14px 0 6px; }
+.segmented.intensity { margin: 0; }
+.cardio-done .num { font-size: .9375rem; letter-spacing: -.01em; }
+.cardio-ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+
+/* ── Notes de séance (feuille de fin + historique) ── */
+#session-note { width: 100%; resize: none; }
+label.block-key { display: block; }
+.day-note {
+  display: flex; flex-direction: column; gap: 3px;
+  width: 100%; padding: 10px 13px;
+  border: 0; border-left: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--tx); font: inherit; text-align: left; cursor: pointer;
+  transition: transform 90ms ease-out;
+}
+.day-note:active { transform: scale(.99); }
+.day-note-k { font-size: .6875rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-tx); }
+.day-note-t { font-size: .8125rem; line-height: 1.45; color: var(--tx-2); white-space: pre-wrap; }
+
+/* Le maillon des supersets (plus haut) a repris le nom `.link-btn`
+   du lien texte « Voir les valeurs » et lui imposait 32 px de large :
+   le lien s'empilait sur trois lignes. On lui rend sa forme. */
+#ex-table-btn { display: inline-block; width: auto; height: auto; padding: 12px 2px; margin: 0; border-radius: 0; }
+#ex-table-btn:active { transform: none; }

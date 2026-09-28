@@ -258,11 +258,13 @@ function initEdgeBack() {
 }
 
 /* ── Sélecteur d'exercice (recherche + création) ──────────── */
-function pickExercise(current, onPick) {
+/* `create: false` quand on ne fait que choisir parmi l'existant
+   (Progrès) : y créer un exercice n'aurait aucun sens. */
+function pickExercise(current, onPick, { create = true } = {}) {
   const names = allExercises();
   openSheet(
     `<h2 class="sheet-h">Exercice</h2>
-     <input type="search" class="input search" id="ex-search" placeholder="Chercher ou créer…" autocomplete="off">
+     <input type="search" class="input search" id="ex-search" placeholder="${create ? "Chercher ou créer…" : "Chercher…"}" autocomplete="off">
      <div class="pick-list" id="ex-pick-list"></div>`
   );
   /* Pas d'autofocus : le clavier iOS montait pendant que la feuille
@@ -276,12 +278,13 @@ function pickExercise(current, onPick) {
       hits.map((n) => `<button type="button" class="pick-row${n === current ? " on" : ""}" data-name="${esc(n)}">
           <span>${esc(n)}</span>${n === current ? '<svg viewBox="0 0 24 24" class="tick"><path d="m5 12.5 4.5 4.5L19 7"/></svg>' : ""}
         </button>`).join("") +
-      (search.value.trim() && !names.some((n) => n.toLowerCase() === q)
+      (create && search.value.trim() && !names.some((n) => n.toLowerCase() === q)
         ? `<button type="button" class="pick-row create" data-name="${esc(search.value.trim())}">
              <span>Créer « ${esc(search.value.trim())} »</span>
              <svg viewBox="0 0 24 24" class="tick"><path d="M12 5v14M5 12h14"/></svg></button>`
         : "") +
-      (!hits.length && !search.value.trim() ? `<p class="muted pad">Aucun exercice pour l'instant. Tape un nom pour en créer un.</p>` : "");
+      (!hits.length && !search.value.trim() ? `<p class="muted pad">Aucun exercice pour l'instant.${create ? " Tape un nom pour en créer un." : ""}</p>` : "") +
+      (!create && !hits.length && search.value.trim() ? `<p class="muted pad">Aucun exercice ne correspond.</p>` : "");
   };
   draw();
   search.addEventListener("input", () => { draw(); measureSheet(); });
@@ -350,8 +353,7 @@ function relDay(dateStr) {
    les exercices d'un superset la réutilisent telle quelle, à
    l'intérieur de leur encadré. */
 function exRow(e, badge, stripe) {
-  const sub = [e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null]
-    .filter(Boolean).join(" · ") || "libre";
+  const sub = exSub(e);
   return `<li class="ex-row${badge.superset ? " ss" : ""}">
       <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
       <span class="ex-num">${badge.superset ? `<b>${badge.text}</b>` : badge.text}</span>
@@ -359,7 +361,7 @@ function exRow(e, badge, stripe) {
         <span class="ex-title">${esc(e.name)}</span>
         <span class="ex-sub">${sub}</span>
       </span>
-      <span class="ex-best">${DB.prs[e.name] ? `${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
+      <span class="ex-best">${e.kind !== "cardio" && DB.prs[e.name] ?`${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
     </li>`;
 }
 
@@ -505,9 +507,9 @@ function editProgram(existing) {
           <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
           <span class="ex-main">
             <span class="ex-title">${esc(e.name)}</span>
-            <span class="ex-sub">${[e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre"}</span>
+            <span class="ex-sub">${exSub(e)}</span>
           </span>
-          ${i === 0
+          ${i === 0 || e.kind === "cardio" || draft.exercises[i - 1].kind === "cardio"
             ? `<span class="link-btn spacer" aria-hidden="true"></span>`
             : `<button type="button" class="link-btn${linked(i) ? " on" : ""}" data-i="${i}"
                  aria-pressed="${linked(i)}"
@@ -565,7 +567,15 @@ function editProgram(existing) {
     buzz(6);
   });
 
-  $("add-ex").addEventListener("click", () => addExerciseSheet(draft, drawDraft));
+  $("add-ex").addEventListener("click", () => addExerciseSheet({
+    prev: draft.exercises[draft.exercises.length - 1],
+    onAdd: (ex, { superset }) => {
+      const lastGroup = draft.exercises.length ? draft.exercises[draft.exercises.length - 1].group : -1;
+      ex.group = superset && draft.exercises.length ? lastGroup : lastGroup + 1;
+      draft.exercises.push(ex);
+      drawDraft();
+    },
+  }));
 
   $("save-prog").addEventListener("click", () => {
     const name = $("pname").value.trim();
@@ -581,47 +591,82 @@ function editProgram(existing) {
   });
 }
 
-/* `picked` voyage en paramètre : la feuille est reconstruite après le
-   sélecteur, et une variable locale y serait remise à zéro — le choix
-   serait perdu sans que rien ne le dise. */
-function addExerciseSheet(draft, redraw, picked = "") {
-  const prev = draft.exercises[draft.exercises.length - 1];
+/* Le sous-titre d'un exercice de programme. */
+const exSub = (e) => e.kind === "cardio"
+  ? ["Cardio", e.minutes ? `${fmt(e.minutes)} min` : null].filter(Boolean).join(" · ")
+  : [e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre";
+
+/* Ajouter un exercice — depuis l'éditeur de programme OU en pleine
+   séance. `ctx` : { prev, session, onAdd(ex, { superset, keep }) }.
+   `picked` et `kind` voyagent en paramètres : la feuille est
+   reconstruite après le sélecteur, et une variable locale y serait
+   remise à zéro — le choix serait perdu sans que rien ne le dise. */
+function addExerciseSheet(ctx, picked = "", kind = null) {
+  if (picked && isCardio(picked)) kind = "cardio";
+  kind = kind || "force";
   const last = picked ? lastEntry(picked) : null;
+  const lf = last && !cardioLog(last) ? last : null;
+  const lc = cardioLog(last) ? last : null;
+  const prev = ctx.prev;
   openSheet(
     `<h2 class="sheet-h">Ajouter un exercice</h2>
+     <div class="segmented" id="ex-kind" role="radiogroup" aria-label="Type d'exercice">
+       <button type="button" data-kind="force" class="${kind === "force" ? "on" : ""}">Musculation</button>
+       <button type="button" data-kind="cardio" class="${kind === "cardio" ? "on" : ""}">Cardio</button>
+     </div>
      <button type="button" class="picker-pill wide${picked ? " filled" : ""}" id="pick-ex">
-       <span id="pick-ex-label">${picked ? esc(picked) : "Choisir un exercice"}</span>
+       <span id="pick-ex-label">${picked ? esc(picked) : kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice"}</span>
        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
      </button>
-     <div class="row2">
-       <div class="field"><label for="ex-sets">Séries</label>
-         <input class="input" id="ex-sets" type="number" min="1" max="20" inputmode="numeric"
-                placeholder="3" value="${last ? last.sets : ""}"></div>
-       <div class="field"><label for="ex-reps">Reps</label>
-         <input class="input" id="ex-reps" placeholder="8-10" autocomplete="off"
-                value="${last ? esc(String(last.reps)) : ""}"></div>
+     <div data-for="force" ${kind === "force" ? "" : "hidden"}>
+       <div class="row2">
+         <div class="field"><label for="ex-sets">Séries</label>
+           <input class="input" id="ex-sets" type="number" min="1" max="20" inputmode="numeric"
+                  placeholder="3" value="${lf ? lf.sets : ""}"></div>
+         <div class="field"><label for="ex-reps">Reps</label>
+           <input class="input" id="ex-reps" placeholder="8-10" autocomplete="off"
+                  value="${lf ? esc(String(lf.reps)) : ""}"></div>
+       </div>
+       ${prev && prev.kind !== "cardio" && !ctx.session ? `<label class="check-row"><input type="checkbox" id="ex-ss"><span>Superset avec « ${esc(prev.name)} »</span></label>` : ""}
      </div>
-     ${prev ? `<label class="check-row"><input type="checkbox" id="ex-ss"><span>Superset avec « ${esc(prev.name)} »</span></label>` : ""}
+     <div data-for="cardio" ${kind === "cardio" ? "" : "hidden"}>
+       <div class="field"><label for="ex-min">Durée visée (min) — facultative</label>
+         <input class="input" id="ex-min" type="number" min="1" inputmode="numeric"
+                placeholder="20" value="${lc ? fmt(lc.minutes) : ""}"></div>
+     </div>
+     ${ctx.session ? `<label class="check-row"><input type="checkbox" id="ex-keep"><span>Le garder aussi dans le programme</span></label>` : ""}
      <button class="primary" id="ex-add"><span class="primary-label">Ajouter</span></button>`
   );
 
+  /* Le type se change sur place : rouvrir la feuille ferait
+     redescendre puis remonter tout le formulaire. */
+  $("ex-kind").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-kind]");
+    if (!b || b.dataset.kind === kind) return;
+    kind = b.dataset.kind;
+    $("ex-kind").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    $("sheet-body").querySelectorAll("[data-for]").forEach((x) => { x.hidden = x.dataset.for !== kind; });
+    if (!picked) $("pick-ex-label").textContent = kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice";
+    buzz(6);
+    measureSheet();
+  });
+
   $("pick-ex").addEventListener("click", () => {
     closeSheet();
-    onSheetClose = () => pickExercise(picked, (name) => addExerciseSheet(draft, redraw, name));
+    onSheetClose = () => pickExercise(picked, (name) => addExerciseSheet(ctx, name, kind));
   });
 
   $("ex-add").addEventListener("click", () => {
     if (!picked) { toast("Choisis d'abord un exercice"); return; }
-    const ss = $("ex-ss") && $("ex-ss").checked;
-    const lastGroup = draft.exercises.length ? draft.exercises[draft.exercises.length - 1].group : -1;
-    draft.exercises.push({
-      name: picked,
-      sets: Number($("ex-sets").value) || null,
-      reps: $("ex-reps").value.trim() || null,
-      group: ss && draft.exercises.length ? lastGroup : lastGroup + 1,
-    });
+    const ex = kind === "cardio"
+      ? { name: picked, kind: "cardio", minutes: Number($("ex-min").value) || null }
+      : { name: picked, sets: Number($("ex-sets").value) || null, reps: $("ex-reps").value.trim() || null };
+    const opts = {
+      superset: kind === "force" && !!($("ex-ss") && $("ex-ss").checked),
+      keep: !!($("ex-keep") && $("ex-keep").checked),
+    };
     closeSheet();
-    onSheetClose = () => { redraw(); buzz(9); };
+    onSheetClose = () => { ctx.onAdd(ex, opts); buzz(9); };
   });
 }
 
@@ -794,8 +839,11 @@ function renderHistory() {
   const logs = calDay
     ? all.filter((l) => l.date === calDay).sort((a, b) => b.createdAt - a.createdAt)
     : logsOfMonth(calY, calM);
+  const notes = DB.journal
+    .filter((n) => (calDay ? n.date === calDay : n.date.startsWith(monthKey(calY, calM))))
+    .sort((a, b) => a.createdAt - b.createdAt);
 
-  if (!logs.length) {
+  if (!logs.length && !notes.length) {
     host.innerHTML = all.length
       ? `<div class="empty">
            <p class="empty-title">Rien en ${esc(MOIS_C[calM])}</p>
@@ -808,19 +856,30 @@ function renderHistory() {
     return;
   }
 
-  const byDay = {};
+  const byDay = {}, notesByDay = {};
   logs.forEach((l) => { (byDay[l.date] ||= []).push(l); });
+  notes.forEach((n) => { byDay[n.date] ||= []; (notesByDay[n.date] ||= []).push(n); });
 
   host.innerHTML = Object.keys(byDay).sort().reverse().map((day) => {
     const items = byDay[day];
     const vol = items.reduce((n, l) => n + volumeOf(l), 0);
+    const mins = items.reduce((n, l) => n + (cardioLog(l) ? Number(l.minutes) || 0 : 0), 0);
+    const head = [
+      vol ? `${Math.round(vol).toLocaleString("fr-CA")} lb` : null,
+      mins ? `${fmt(mins)} min de cardio` : null,
+    ].filter(Boolean).join(" · ");
     return `<section class="day">
       <header class="day-head">
         <span class="day-name">${esc(prettyDay(day))}</span>
-        <span class="day-vol tnum">${Math.round(vol).toLocaleString("fr-CA")} lb</span>
+        <span class="day-vol tnum">${head}</span>
       </header>
+      ${(notesByDay[day] || []).map((n) => `
+        <button type="button" class="day-note" data-note="${esc(n.id)}">
+          <span class="day-note-k">Note${n.programName ? ` · ${esc(n.programName)}` : ""}</span>
+          <span class="day-note-t">${esc(n.text)}</span>
+        </button>`).join("")}
       ${items.map((l) => {
-        const detail = l.perSet
+        const detail = cardioLog(l) ? cardioText(l) : l.perSet
           ? l.perSet.map((s) => `${fmt(s.weight)}×${s.reps}`).join("  ")
           : `${fmt(l.weight)} lb × ${l.reps} × ${l.sets} série${l.sets > 1 ? "s" : ""}`;
         return `<div class="swipe-row" data-log="${esc(l.id)}">
@@ -848,16 +907,74 @@ function renderHistory() {
       toast("Entrée supprimée");
     } });
   });
+
+  host.querySelectorAll(".day-note").forEach((b) => {
+    b.addEventListener("click", () => journalSheet(b.dataset.note));
+  });
 }
 
-function quickLogSheet(picked = "") {
-  const last = picked ? lastEntry(picked) : null;
+/* Relire, corriger ou effacer une note de séance. */
+function journalSheet(id) {
+  const n = DB.journal.find((x) => x.id === id);
+  if (!n) return;
+  openSheet(
+    `<p class="sheet-kicker">${esc(prettyDay(n.date))}${n.programName ? ` · ${esc(n.programName)}` : ""}</p>
+     <h2 class="sheet-h">Note de séance</h2>
+     <div class="field"><textarea class="input" id="jn-text" rows="4" aria-label="Note de séance">${esc(n.text)}</textarea></div>
+     <button class="primary" id="jn-save"><span class="primary-label">Enregistrer</span></button>
+     <button class="ghost-btn danger-btn" id="jn-del">Supprimer la note</button>`
+  );
+  $("jn-save").addEventListener("click", () => {
+    const t = $("jn-text").value.trim();
+    if (t) n.text = t; else DB.journal = DB.journal.filter((x) => x.id !== id);
+    persist.journal();
+    closeSheet();
+    onSheetClose = () => { renderHistory(); toast(t ? "Note mise à jour" : "Note supprimée"); };
+  });
+  $("jn-del").addEventListener("click", () => {
+    DB.journal = DB.journal.filter((x) => x.id !== id);
+    persist.journal();
+    closeSheet();
+    onSheetClose = () => { renderHistory(); toast("Note supprimée"); };
+  });
+}
+
+function quickLogSheet(picked = "", kind = null) {
+  /* Appelée directement comme écouteur de clic : le 1er argument
+     est alors l'événement, pas un nom. */
+  if (typeof picked !== "string") picked = "";
+  if (picked && isCardio(picked)) kind = "cardio";
+  kind = kind || "force";
+  const lastAny = picked ? lastEntry(picked) : null;
+  const last = lastAny && !cardioLog(lastAny) ? lastAny : null;
+  const lc = cardioLog(lastAny) ? lastAny : null;
+  let intensity = lc && lc.intensity ? lc.intensity : 2;
   openSheet(
     `<h2 class="sheet-h">Nouvelle entrée</h2>
+     <div class="segmented" id="ql-kind" role="radiogroup" aria-label="Type d'entrée">
+       <button type="button" data-kind="force" class="${kind === "force" ? "on" : ""}">Musculation</button>
+       <button type="button" data-kind="cardio" class="${kind === "cardio" ? "on" : ""}">Cardio</button>
+     </div>
      <button type="button" class="picker-pill wide${picked ? " filled" : ""}" id="ql-pick">
-       <span id="ql-label">${picked ? esc(picked) : "Choisir un exercice"}</span>
+       <span id="ql-label">${picked ? esc(picked) : kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice"}</span>
        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
      </button>
+     <div data-for="cardio" ${kind === "cardio" ? "" : "hidden"}>
+       <div class="row3">
+         <div class="field"><label for="ql-min">Durée (min)</label>
+           <input class="input" id="ql-min" type="number" min="1" step="any" inputmode="decimal" value="${lc ? fmt(lc.minutes) : ""}" placeholder="30"></div>
+         <div class="field"><label for="ql-km">Distance (km)</label>
+           <input class="input" id="ql-km" type="number" min="0" step="any" inputmode="decimal" placeholder="—"></div>
+         <div class="field"><label for="ql-cal">Calories</label>
+           <input class="input" id="ql-cal" type="number" min="0" inputmode="numeric" placeholder="—"></div>
+       </div>
+       <p class="block-key" style="margin-top:2px">Intensité</p>
+       <div class="segmented" id="ql-int" role="radiogroup" aria-label="Intensité">
+         ${[1, 2, 3].map((n) => `<button type="button" data-int="${n}" class="${n === intensity ? "on" : ""}">${INTENSITY[n]}</button>`).join("")}
+       </div>
+       <p class="fineprint">${lc ? `Dernière fois : ${esc(cardioText(lc))}` : picked ? "Première entrée pour cet exercice." : "Distance et calories sont facultatives."}</p>
+     </div>
+     <div data-for="force" ${kind === "force" ? "" : "hidden"}>
      <div class="row3">
        <div class="field"><label for="ql-w">Poids (lb)</label>
          <input class="input" id="ql-w" type="number" step="0.5" min="0" inputmode="decimal"
@@ -870,17 +987,50 @@ function quickLogSheet(picked = "") {
      <p class="fineprint">${last
         ? `Dernière fois : ${fmt(last.weight)} lb × ${last.reps} × ${last.sets}${DB.prs[picked] ? ` · record ${fmt(DB.prs[picked])} lb` : ""}`
         : (picked ? "Première entrée pour cet exercice." : "")}</p>
+     </div>
      <button class="primary" id="ql-save"><span class="primary-label">Ajouter</span></button>`
   );
 
+  $("ql-kind").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-kind]");
+    if (!b || b.dataset.kind === kind) return;
+    kind = b.dataset.kind;
+    $("ql-kind").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    $("sheet-body").querySelectorAll("[data-for]").forEach((x) => { x.hidden = x.dataset.for !== kind; });
+    if (!picked) $("ql-label").textContent = kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice";
+    buzz(6);
+    measureSheet();
+  });
+  $("ql-int").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-int]");
+    if (!b) return;
+    intensity = Number(b.dataset.int);
+    $("ql-int").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    buzz(6);
+  });
+
   $("ql-pick").addEventListener("click", () => {
     closeSheet();
-    onSheetClose = () => pickExercise(picked, (name) => quickLogSheet(name));
+    onSheetClose = () => pickExercise(picked, (name) => quickLogSheet(name, kind));
   });
 
   $("ql-save").addEventListener("click", () => {
-    const w = Number($("ql-w").value), st = Number($("ql-s").value), r = Number($("ql-r").value);
     if (!picked) { toast("Choisis un exercice"); return; }
+    if (kind === "cardio") {
+      const num = (id) => { const v = Number($(id).value.replace(",", ".")); return v > 0 ? v : null; };
+      const minutes = num("ql-min");
+      if (!minutes) { toast("Entre au moins une durée"); return; }
+      addLog({ exercise: picked, kind: "cardio", minutes, distance: num("ql-km"),
+        calories: num("ql-cal"), intensity, programId: null, programName: null });
+      closeSheet();
+      onSheetClose = () => {
+        calToNow();
+        renderHistory(); renderProgress(); renderPrograms();
+        toast("Cardio ajouté"); buzz(9);
+      };
+      return;
+    }
+    const w = Number($("ql-w").value), st = Number($("ql-s").value), r = Number($("ql-r").value);
     if (!(w >= 0) || !(st >= 1) || !(r >= 1)) { toast("Poids, séries et reps sont requis"); return; }
     const res = addLog({ exercise: picked, weight: w, sets: st, reps: r, programId: null, programName: null });
     closeSheet();
@@ -922,7 +1072,19 @@ function renderExerciseProgress() {
     currentEx = names.slice().sort((a, b) => (count[b] || 0) - (count[a] || 0))[0];
   }
   $("ex-picker-label").textContent = currentEx;
-  $("metric-toggle").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.metric === metric));
+
+  /* Le cardio n'a ni poids ni reps : le même interrupteur bascule
+     sur Durée / Distance. */
+  const cardio = isCardio(currentEx);
+  const choices = cardio ? [["minutes", "Durée"], ["distance", "Distance"]] : [["weight", "Poids"], ["reps", "Reps"]];
+  if (!choices.some(([k]) => k === metric)) metric = choices[0][0];
+  $("metric-toggle").querySelectorAll("button").forEach((b, k) => {
+    b.dataset.metric = choices[k][0];
+    b.textContent = choices[k][1];
+    b.classList.toggle("on", b.dataset.metric === metric);
+  });
+
+  if (cardio) { renderCardioProgress(); return; }
 
   const pts = seriesFor(currentEx, metric);
   const unit = metric === "weight" ? "lb" : "reps";
@@ -948,6 +1110,28 @@ function renderExerciseProgress() {
   /* Vue tableau : l'information ne doit jamais exister qu'en image. */
   $("ex-table").innerHTML = pts.slice().reverse().map((p) =>
     `<div class="vrow"><span>${esc(longDate(p.x))}</span><b class="tnum">${fmt(p.y)} ${esc(unit)}</b>${prSet.has(p.x) && metric === "weight" ? '<em>record</em>' : ""}</div>`).join("");
+}
+
+function renderCardioProgress() {
+  const pts = seriesFor(currentEx, metric);
+  const unit = metric === "distance" ? "km" : "min";
+  const all = DB.logs.filter((l) => l.exercise === currentEx && cardioLog(l));
+  const best = pts.reduce((m, p) => Math.max(m, p.y), 0);
+  const last = pts[pts.length - 1];
+
+  $("ex-stats").innerHTML = pts.length ? `
+    <div class="stat"><span class="stat-val tnum">${fmt(best)}</span><span class="stat-key">Plus ${metric === "distance" ? "loin" : "long"} (${unit})</span></div>
+    <div class="stat"><span class="stat-val tnum">${fmt(last.y)}</span><span class="stat-key">Dernière (${unit})</span></div>
+    <div class="stat"><span class="stat-val tnum">${all.length}</span><span class="stat-key">Séances</span></div>` : "";
+
+  renderChart($("ex-chart"), pts, {
+    unit, prSet: new Set(),
+    label: `${metric === "distance" ? "Distance" : "Durée"} — ${currentEx}`,
+    empty: metric === "distance" ? "Aucune distance notée pour cet exercice." : "Aucune donnée pour cet exercice.",
+  });
+
+  $("ex-table").innerHTML = pts.slice().reverse().map((p) =>
+    `<div class="vrow"><span>${esc(longDate(p.x))}</span><b class="tnum">${esc(cardioText(p.log))}</b></div>`).join("");
 }
 
 function renderBodyweight() {

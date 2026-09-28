@@ -111,7 +111,7 @@ function initApp() {
     renderExerciseProgress();
   });
   $("ex-picker-btn").addEventListener("click", () => {
-    pickExercise(currentEx, (n) => { currentEx = n; renderExerciseProgress(); });
+    pickExercise(currentEx, (n) => { currentEx = n; renderExerciseProgress(); }, { create: false });
   });
   $("ex-table-btn").addEventListener("click", () => {
     const t = $("ex-table"), open = t.hidden;
@@ -200,6 +200,15 @@ function initApp() {
       Object.values(K).forEach((k) => localStorage.removeItem(k));
       location.reload();
     });
+  });
+
+  /* `.app` coupe ce qui déborde mais reste un conteneur de
+     défilement : quand un champ d'une feuille prend le focus, le
+     navigateur le fait glisser pour « montrer » le champ, et toute
+     l'app se décale de côté. Rien ne doit jamais le faire défiler. */
+  $("app").addEventListener("scroll", () => {
+    const a = $("app");
+    if (a.scrollLeft || a.scrollTop) { a.scrollLeft = 0; a.scrollTop = 0; }
   });
 
   initSheetGestures();

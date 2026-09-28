@@ -15,7 +15,9 @@ const S = {
   idx: 0,
   startedAt: 0,
   beatenPRs: [],
-  logged: new Set(),
+  /* exercice → id de son entrée d'historique. Une entrée déjà
+     écrite se RÉÉCRIT si l'exercice reçoit une série de plus. */
+  logIds: new Map(),
   open: false,
   clockTimer: 0,
 };
@@ -28,7 +30,9 @@ const CHECK = '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>';
    le même groupe. Compter les groupes sans regarder l'ordre laissait
    passer un « A … B … A » impossible à enchaîner dans la salle. */
 const sameGroup = (a, b) =>
-  !!a && !!b && a.group != null && b.group != null && a.group === b.group;
+  !!a && !!b && a.group != null && b.group != null && a.group === b.group &&
+  /* Le cardio ne s'enchaîne pas en superset : il a sa propre carte. */
+  a.kind !== "cardio" && b.kind !== "cardio";
 
 function supersetRuns(exs) {
   const runs = [];
@@ -74,6 +78,37 @@ const firstNum = (s, fallback) => {
   return m ? Number(m[0]) : fallback;
 };
 
+/* L'état de départ d'un exercice : ce que tu as fait la dernière
+   fois. `skipped` = passé aujourd'hui, réversible jusqu'à la fin. */
+function initState(ex) {
+  const last = lastEntry(ex.name);
+  if (ex.kind === "cardio") {
+    const lc = cardioLog(last) ? last : null;
+    return {
+      done: [], last: lc, skipped: false, target: 1,
+      draft: {
+        minutes: ex.minutes || (lc ? lc.minutes : 20),
+        distance: null, calories: null,
+        intensity: lc && lc.intensity ? lc.intensity : 2,
+      },
+    };
+  }
+  const lw = last && !cardioLog(last) ? last : null;
+  const lastTop = lw && lw.perSet
+    ? lw.perSet.reduce((a, b) => (b.weight > a.weight ? b : a))
+    : null;
+  return {
+    done: [],
+    last: lw,
+    skipped: false,
+    draft: {
+      weight: lastTop ? lastTop.weight : (lw ? lw.weight : 0),
+      reps: lastTop ? lastTop.reps : (lw ? lw.reps : firstNum(ex.reps, 10)),
+    },
+    target: ex.sets || (lw ? lw.sets : 3),
+  };
+}
+
 /* ── Ouverture ────────────────────────────────────────────── */
 function startSession(program) {
   if (!program.exercises.length) { toast("Ce programme n'a pas encore d'exercices"); return; }
@@ -83,25 +118,10 @@ function startSession(program) {
   S.blocks = groupBlocks(S.exercises);
   S.idx = 0;
   S.beatenPRs = [];
-  S.logged = new Set();
+  S.logIds = new Map();
   S.startedAt = Date.now();
-
-  /* Le point de départ, c'est ce que tu as fait la dernière fois. */
-  S.state = S.exercises.map((ex) => {
-    const last = lastEntry(ex.name);
-    const lastTop = last && last.perSet
-      ? last.perSet.reduce((a, b) => (b.weight > a.weight ? b : a))
-      : null;
-    return {
-      done: [],
-      last,
-      draft: {
-        weight: lastTop ? lastTop.weight : (last ? last.weight : 0),
-        reps: lastTop ? lastTop.reps : (last ? last.reps : firstNum(ex.reps, 10)),
-      },
-      target: ex.sets || (last ? last.sets : 3),
-    };
-  });
+  S.state = S.exercises.map(initState);
+  sEl("session-note").value = "";
 
   buildCards();
   sEl("program-name").textContent = program.name;
@@ -170,23 +190,29 @@ function buildCards() {
 
 /* Combien de rangées pour un exercice : sa cible, ou plus si des
    séries en trop ont été validées. */
-const nRows = (i) => Math.max(S.state[i].target, S.state[i].done.length);
-const ssRounds = (blk) => Math.max(...blk.members.map(nRows));
+/* Un exercice passé n'attend plus rien : il garde seulement les
+   séries déjà faites. */
+const nRows = (i) => S.state[i].skipped
+  ? S.state[i].done.length
+  : Math.max(S.state[i].target, S.state[i].done.length);
+const ssRounds = (blk) => Math.max(0, ...blk.members.map(nRows));
 
 const lastTxt = (i) => {
   const st = S.state[i];
-  return st.last
-    ? `dernière fois <b>${fmt(st.last.perSet ? Math.max(...st.last.perSet.map((s) => s.weight)) : st.last.weight)} lb</b>`
-    : `<b>première fois</b>`;
+  if (!st.last) return `<b>première fois</b>`;
+  if (cardioLog(st.last)) return `dernière fois <b>${fmt(st.last.minutes)} min</b>`;
+  return `dernière fois <b>${fmt(st.last.perSet ? Math.max(...st.last.perSet.map((s) => s.weight)) : st.last.weight)} lb</b>`;
 };
 
 /* En-tête d'un exercice seul. */
 function soloHead(i) {
   const ex = S.exercises[i], st = S.state[i];
-  const target = [
-    st.target ? `<b>${st.target}</b> séries` : null,
-    ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
-  ].filter(Boolean).join(" · ");
+  const target = ex.kind === "cardio"
+    ? [`<b>Cardio</b>`, ex.minutes ? `<b>${fmt(ex.minutes)}</b> min visées` : null].filter(Boolean).join(" · ")
+    : [
+      st.target ? `<b>${st.target}</b> séries` : null,
+      ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
+    ].filter(Boolean).join(" · ");
   const note = DB.notes[ex.name];
   return `<h2 class="ex-name">${esc(ex.name)}</h2>` +
     `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
@@ -228,12 +254,17 @@ function activeCell(b) {
 function renderCard(b) {
   const blk = S.blocks[b], ol = S.cards[b].sets;
   ol.innerHTML = "";
+  S.cards[b].el.classList.toggle("is-skipped", blk.members.every((i) => S.state[i].skipped));
 
   if (!blk.superset) {
     const i = blk.members[0];
-    for (let j = 0; j < nRows(i); j++) {
-      ol.appendChild(setRow(i, j, String(j + 1), null, j === S.state[i].done.length));
+    if (S.exercises[i].kind === "cardio") ol.appendChild(cardioRow(i));
+    else {
+      for (let j = 0; j < nRows(i); j++) {
+        ol.appendChild(setRow(i, j, String(j + 1), null, j === S.state[i].done.length));
+      }
     }
+    appendSkipped(ol, blk);
     return;
   }
 
@@ -250,7 +281,77 @@ function renderCard(b) {
         !!cell && cell.i === i && cell.r === r));
     });
   }
+  appendSkipped(ol, blk);
 }
+
+/* Un exercice passé laisse une ligne sur sa carte, avec de quoi
+   revenir sur la décision — passer n'est jamais définitif. */
+function appendSkipped(ol, blk) {
+  blk.members.forEach((i) => {
+    if (!S.state[i].skipped) return;
+    const li = document.createElement("li");
+    li.className = "skip-row";
+    li.innerHTML =
+      `<span class="skip-txt"><b>${esc(S.exercises[i].name)}</b> passé aujourd'hui` +
+      `${S.state[i].done.length ? ` · ${S.state[i].done.length} série${S.state[i].done.length > 1 ? "s" : ""} gardée${S.state[i].done.length > 1 ? "s" : ""}` : ""}</span>` +
+      `<button type="button" class="skip-undo">Reprendre</button>`;
+    li.querySelector("button").addEventListener("click", () => toggleSkip(i));
+    ol.appendChild(li);
+  });
+}
+
+/* La carte d'un cardio : pas de séries, un seul relevé. La durée
+   est obligatoire, distance et calories se laissent vides. */
+function cardioRow(i) {
+  const st = S.state[i], rec = st.done[0];
+  const li = document.createElement("li");
+  li.dataset.ex = String(i);
+  li.dataset.r = "0";
+
+  if (rec) {
+    li.className = "set done cardio-done";
+    li.innerHTML = `<span class="set-idx">${CARDIO_ICON}</span>` +
+      `<span class="set-vals"><span class="num">${esc(cardioText(rec))}</span></span>` +
+      `<span class="set-check">${CHECK}</span>`;
+    return li;
+  }
+  if (st.skipped) { li.hidden = true; return li; }
+
+  const d = st.draft, lc = st.last;
+  const field = (k, label, unit, main) =>
+    `<label class="cf${main ? " main" : ""}"><span class="cf-key">${label}</span>` +
+    `<span class="cf-in"><input type="number" inputmode="decimal" min="0" step="any" data-k="${k}"` +
+    ` value="${d[k] ?? ""}" placeholder="${lc && lc[k] ? fmt(lc[k]) : "—"}"><em>${unit}</em></span></label>`;
+
+  li.className = "cardio-form";
+  li.innerHTML =
+    `<div class="cf-grid">${field("minutes", "Durée", "min", true)}${field("distance", "Distance", "km")}${field("calories", "Calories", "cal")}</div>` +
+    `<p class="cf-key cf-int-key">Intensité</p>` +
+    `<div class="segmented intensity" role="radiogroup" aria-label="Intensité">` +
+    [1, 2, 3].map((n) => `<button type="button" role="radio" data-int="${n}" class="${d.intensity === n ? "on" : ""}" aria-checked="${d.intensity === n}">${INTENSITY[n]}</button>`).join("") +
+    `</div>`;
+
+  li.querySelectorAll("input[data-k]").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const v = inp.value.trim() === "" ? null : Number(inp.value.replace(",", "."));
+      d[inp.dataset.k] = Number.isFinite(v) && v >= 0 ? v : null;
+    });
+  });
+  li.querySelector(".intensity").addEventListener("click", (e) => {
+    const bt = e.target.closest("[data-int]");
+    if (!bt) return;
+    d.intensity = Number(bt.dataset.int);
+    li.querySelectorAll("[data-int]").forEach((x) => {
+      const on = x === bt;
+      x.classList.toggle("on", on);
+      x.setAttribute("aria-checked", String(on));
+    });
+    buzz(6);
+  });
+  return li;
+}
+
+const CARDIO_ICON = '<svg viewBox="0 0 24 24" class="cardio-ic" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>';
 
 /* Une rangée de série. `name` n'est rempli que dans un superset :
    sans lui on ne saurait pas de quel exercice parle la rangée. */
@@ -359,17 +460,19 @@ function paintStack(p) {
 function sessionLayout() { pageW = sEl("stack").clientWidth || 1; paintStack(sPos.x); }
 addEventListener("resize", () => { if (S.open) sessionLayout(); });
 
-const exDone = (i) => S.state[i] && S.state[i].done.length >= S.state[i].target;
+const exDone = (i) => S.state[i] && (S.state[i].skipped || S.state[i].done.length >= S.state[i].target);
 const blockDone = (b) => S.blocks[b] && S.blocks[b].members.every(exDone);
 const allDone = () => S.state.every((_, i) => exDone(i));
 const doneSets = () => S.state.reduce((n, s) => n + s.done.length, 0);
-const totalSets = () => S.state.reduce((n, s) => n + s.target, 0);
+const totalSets = () => S.state.reduce((n, s) => n + (s.skipped ? s.done.length : Math.max(s.target, s.done.length)), 0);
 
 let sDrag = null;
 function initStackGestures() {
   const stack = sEl("stack");
   stack.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".num[data-k]")) return;
+    /* Les champs du cardio se tapent : un glissé qui partirait
+       d'eux changerait de carte au lieu de placer le curseur. */
+    if (e.target.closest(".num[data-k], input")) return;
     sessionLayout();
     sDrag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, from: sPos.x, at: S.idx, axis: null, tr: tracker() };
     sDrag.tr.add(e.clientX, e.timeStamp);
@@ -432,6 +535,7 @@ function updateButton() {
        rangée active est plus bas dans la carte, pas sous le pouce. */
     label = blk.superset
       ? `Valider ${blk.letter}${cell.k + 1} · tour ${cell.r + 1}`
+      : S.exercises[cell.i].kind === "cardio" ? "Valider le cardio"
       : `Valider la série ${cell.r + 1}`;
     go = false;
   }
@@ -455,9 +559,12 @@ function commitSet() {
   const b = S.idx, blk = S.blocks[b], cell = activeCell(b);
   if (!cell) return;
   const st = S.state[cell.i], ex = S.exercises[cell.i];
+  const cardio = ex.kind === "cardio";
+  if (cardio && !(st.draft.minutes > 0)) { toast("Entre au moins une durée"); return; }
+  if (cardio && document.activeElement) document.activeElement.blur();
   const entry = { ...st.draft };
   const prev = DB.prs[ex.name] ?? 0;
-  const isPR = entry.weight > prev;
+  const isPR = !cardio && entry.weight > prev;
 
   st.done.push(entry);
   renderCard(b);
@@ -481,7 +588,7 @@ function commitSet() {
   updateButton();
   dismissHint();
 
-  if (exDone(cell.i)) flushExercise(cell.i);
+  if (exDone(cell.i) || S.logIds.has(cell.i)) flushExercise(cell.i);
 
   /* On ne quitte la carte qu'une fois le bloc entier bouclé — sinon
      un superset renverrait ailleurs entre A1 et A2. */
@@ -498,22 +605,24 @@ function commitSet() {
    détail par série. On l'écrit dès qu'il est bouclé : si l'app
    se ferme en pleine séance, rien n'est perdu. */
 function flushExercise(i) {
-  if (S.logged.has(i)) return;
   const st = S.state[i], ex = S.exercises[i];
   if (!st.done.length) return;
-  S.logged.add(i);
 
-  const perSet = st.done.map((d) => ({ weight: d.weight, reps: d.reps }));
-  const top = perSet.reduce((a, b) => (b.weight > a.weight ? b : a));
-  addLog({
-    exercise: ex.name,
-    weight: top.weight,
-    reps: top.reps,
-    sets: perSet.length,
-    perSet,
-    programId: S.program.id,
-    programName: S.program.name,
-  });
+  let fields;
+  if (ex.kind === "cardio") {
+    const d = st.done[st.done.length - 1];
+    fields = { kind: "cardio", minutes: d.minutes, distance: d.distance || null,
+      calories: d.calories || null, intensity: d.intensity || null };
+  } else {
+    const perSet = st.done.map((d) => ({ weight: d.weight, reps: d.reps }));
+    const top = perSet.reduce((a, b) => (b.weight > a.weight ? b : a));
+    fields = { weight: top.weight, reps: top.reps, sets: perSet.length, perSet };
+  }
+
+  const id = S.logIds.get(i);
+  if (id && updateLog(id, fields)) return;
+  const { log } = addLog({ exercise: ex.name, ...fields, programId: S.program.id, programName: S.program.name });
+  S.logIds.set(i, log.id);
 }
 
 /* ── Célébration ──────────────────────────────────────────── */
@@ -590,6 +699,8 @@ function openSummary() {
   buzz([10, 40, 10, 40, 18]);
 }
 function closeSummary(velocity = 0) {
+  if (closingSheet) return;
+  saveSessionNote();
   closingSheet = true;
   scSheetY.to(sheetH, { velocity, damping: 1, response: 0.34 });
   setTimeout(closeSession, 180);
@@ -597,7 +708,7 @@ function closeSummary(velocity = 0) {
 
 function fillSummary() {
   sEl("stat-time").textContent = mmss(Date.now() - S.startedAt);
-  const vol = S.state.reduce((n, s) => n + s.done.reduce((m, x) => m + x.weight * x.reps, 0), 0);
+  const vol = S.state.reduce((n, s) => n + s.done.reduce((m, x) => m + (x.weight || 0) * (x.reps || 0), 0), 0);
   sEl("stat-volume").textContent = Math.round(vol).toLocaleString("fr-CA");
   sEl("stat-sets").textContent = String(doneSets());
 
@@ -619,9 +730,206 @@ function fillSummary() {
   sEl("streak-num").textContent = String(streakWeeks());
 }
 
+/* La note de séance s'écrit en refermant la feuille, quel que
+   soit le chemin (bouton, voile, glissé). Vide = rien d'écrit. */
+function saveSessionNote() {
+  const el = sEl("session-note"), text = el.value.trim();
+  el.blur();
+  if (!text || !S.program) return;
+  DB.journal.push({ id: uid(), date: today(), createdAt: Date.now(),
+    programId: S.program.id, programName: S.program.name, text });
+  persist.journal();
+  el.value = "";
+}
+
+/* ══ Modifier la séance en cours ════════════════════════════
+   Tout ce qui se change ici ne vaut que pour AUJOURD'HUI : le
+   programme ne bouge pas, sauf si on coche explicitement « garder
+   dans le programme » en ajoutant un exercice. */
+
+/* Reconstruit la pile après un changement de structure (exercice
+   ajouté ou remplacé) et se place sur la carte de `focusEx`. */
+function rebuildStack(focusEx, animate = false) {
+  const from = S.idx;
+  S.blocks = groupBlocks(S.exercises);
+  buildCards();
+  const b = Math.max(0, S.blocks.findIndex((bl) => bl.members.includes(focusEx)));
+  sessionLayout();
+  if (animate && b !== from) {
+    sPos.hold(Math.min(from, S.cards.length - 1));
+    S.idx = -1;
+    goTo(b);
+  } else {
+    S.idx = b;
+    sPos.hold(b);
+  }
+  sEl("head-count").textContent = `${S.idx + 1} sur ${S.cards.length}`;
+  progressS.to(doneSets() / (totalSets() || 1));
+  updateButton();
+}
+
+/* Après un changement qui ne touche qu'une carte (séries, passer). */
+function refreshBlockOf(i) {
+  const b = S.blocks.findIndex((bl) => bl.members.includes(i));
+  if (b >= 0) renderCard(b);
+  if (exDone(i) || S.logIds.has(i)) flushExercise(i);
+  progressS.to(doneSets() / (totalSets() || 1));
+  paintStack(sPos.x);
+  updateButton();
+}
+
+function toggleSkip(i) {
+  const st = S.state[i];
+  st.skipped = !st.skipped;
+  buzz(st.skipped ? [8, 30, 8] : 9);
+  refreshBlockOf(i);
+  toast(st.skipped ? `${S.exercises[i].name} passé` : `${S.exercises[i].name} repris`);
+  const b = S.idx;
+  if (st.skipped && blockDone(b) && !allDone()) setTimeout(() => { if (S.idx === b) goTo(nextIncomplete()); }, 380);
+}
+
+const MENU_IC = {
+  swap: '<svg viewBox="0 0 24 24" class="tick"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>',
+  skip: '<svg viewBox="0 0 24 24" class="tick"><path d="M6 5v14l9-7zM18 5v14"/></svg>',
+  resume: '<svg viewBox="0 0 24 24" class="tick"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>',
+  note: '<svg viewBox="0 0 24 24" class="tick"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></svg>',
+  add: '<svg viewBox="0 0 24 24" class="tick"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+function sessionMenu(focus) {
+  const blk = S.blocks[S.idx];
+  if (!blk) return;
+  const cell = activeCell(S.idx);
+  const i = focus != null && blk.members.includes(focus) ? focus : (cell ? cell.i : blk.members[0]);
+  const ex = S.exercises[i], st = S.state[i];
+  const cardio = ex.kind === "cardio";
+  const note = DB.notes[ex.name];
+
+  openSheet(
+    `<p class="sheet-kicker">Cette séance seulement</p>
+     <h2 class="sheet-h">${esc(ex.name)}</h2>
+     ${blk.superset ? `<div class="segmented small who" id="sm-who">${blk.members.map((m, k) =>
+        `<button type="button" data-i="${m}" class="${m === i ? "on" : ""}">${blk.letter}${k + 1} · ${esc(S.exercises[m].name)}</button>`).join("")}</div>` : ""}
+     ${!cardio && !st.skipped ? `
+       <div class="stepper-row">
+         <span><b>Séries</b><em>${st.done.length} faite${st.done.length > 1 ? "s" : ""}</em></span>
+         <div class="stepper">
+           <button type="button" id="sm-minus" aria-label="Retirer une série">−</button>
+           <b class="tnum" id="sm-count" aria-live="polite">${st.target}</b>
+           <button type="button" id="sm-plus" aria-label="Ajouter une série">+</button>
+         </div>
+       </div>` : ""}
+     <div class="menu-list">
+       ${st.done.length ? "" : `<button type="button" class="pick-row" id="sm-swap"><span>Remplacer par un autre exercice</span>${MENU_IC.swap}</button>`}
+       <button type="button" class="pick-row${st.skipped ? "" : " warn"}" id="sm-skip">
+         <span>${st.skipped ? "Reprendre cet exercice" : "Passer cet exercice"}
+           <em class="pick-sub">${st.skipped ? "Il revient dans la séance" : st.done.length ? "Les séries déjà faites sont gardées" : "Rien n'est écrit dans l'historique"}</em></span>
+         ${st.skipped ? MENU_IC.resume : MENU_IC.skip}</button>
+       <button type="button" class="pick-row" id="sm-note">
+         <span>Note technique<em class="pick-sub">${note ? esc(note) : "Aucune — elle s'affiche sur la carte à chaque séance"}</em></span>
+         ${MENU_IC.note}</button>
+     </div>
+     <p class="block-key">Séance</p>
+     <div class="menu-list">
+       <button type="button" class="pick-row" id="sm-add"><span>Ajouter un exercice</span>${MENU_IC.add}</button>
+     </div>`
+  );
+
+  if (blk.superset) {
+    $("sm-who").addEventListener("click", (e) => {
+      const bt = e.target.closest("[data-i]");
+      if (!bt || Number(bt.dataset.i) === i) return;
+      buzz(6);
+      closeSheet();
+      onSheetClose = () => sessionMenu(Number(bt.dataset.i));
+    });
+  }
+
+  if (!cardio && !st.skipped) {
+    const set = (n) => {
+      const lo = Math.max(1, st.done.length);
+      const v = Math.max(lo, Math.min(20, n));
+      if (v === st.target) { buzz(3); pop($("sm-count"), 1.04, 0.5); return; }
+      st.target = v;
+      $("sm-count").textContent = String(v);
+      pop($("sm-count"), 1.14, 0.6);
+      buzz(7);
+      refreshBlockOf(i);
+    };
+    $("sm-minus").addEventListener("click", () => set(st.target - 1));
+    $("sm-plus").addEventListener("click", () => set(st.target + 1));
+  }
+
+  if ($("sm-swap")) $("sm-swap").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => pickExercise(ex.name, (name) => {
+      if (name === ex.name) return;
+      /* Un nom déjà connu garde son type ; un nom neuf prend celui
+         de l'exercice qu'il remplace. */
+      const known = allExercises().includes(name);
+      const kind = isCardio(name) ? "cardio" : known ? null : ex.kind || null;
+      const next = { ...ex, name, kind };
+      if (kind !== "cardio") delete next.minutes;
+      S.exercises[i] = next;
+      S.state[i] = initState(next);
+      rebuildStack(i);
+      toast(`Remplacé par ${name}`);
+    });
+  });
+
+  $("sm-skip").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => toggleSkip(i);
+  });
+
+  $("sm-note").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => techNoteSheet(ex.name, () => rebuildStack(i));
+  });
+
+  $("sm-add").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => addExerciseSheet({
+      session: true,
+      onAdd: (nx, { keep }) => {
+        nx.group = freeGroup(S.exercises);
+        S.exercises.push(nx);
+        S.state.push(initState(nx));
+        if (keep) {
+          S.program.exercises.push({ ...nx, group: freeGroup(S.program.exercises) });
+          persist.programs();
+        }
+        rebuildStack(S.exercises.length - 1, true);
+        toast(keep ? "Ajouté — et gardé dans le programme" : "Ajouté pour aujourd'hui");
+      },
+    });
+  });
+}
+
+/* La note technique est permanente : elle suit l'exercice d'une
+   séance à l'autre. On l'écrit d'ici sans passer par les Réglages. */
+function techNoteSheet(name, after) {
+  openSheet(
+    `<p class="sheet-kicker">Note technique</p>
+     <h2 class="sheet-h">${esc(name)}</h2>
+     <div class="field"><label for="tn-text">Elle s'affiche sur la carte à chaque séance</label>
+       <textarea class="input" id="tn-text" rows="3" placeholder="Ex : grip large, coudes serrés">${esc(DB.notes[name] || "")}</textarea></div>
+     <button class="primary" id="tn-save"><span class="primary-label">Enregistrer</span></button>`
+  );
+  $("tn-save").addEventListener("click", () => {
+    const t = $("tn-text").value.trim();
+    if (t) DB.notes[name] = t; else delete DB.notes[name];
+    persist.notes();
+    $("tn-text").blur();
+    closeSheet();
+    onSheetClose = () => { if (after) after(); toast(t ? "Note enregistrée" : "Note retirée"); buzz(9); };
+  });
+}
+
 /* ── Câblage ──────────────────────────────────────────────── */
 function initSession() {
   initStackGestures();
+  sEl("session-menu").addEventListener("click", () => sessionMenu());
   sEl("commit").addEventListener("click", () => {
     if (activeCell(S.idx)) commitSet();
     else if (allDone()) openSummary();
@@ -638,7 +946,7 @@ function initSession() {
   const sh = sEl("sc-sheet"), scroller = sh.querySelector(".sheet-scroll");
   let sd = null;
   sh.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button")) return;
+    if (e.target.closest("button, textarea")) return;
     sd = { id: e.pointerId, y0: e.clientY, from: scSheetY.x, armed: false, tr: tracker() };
     sd.tr.add(e.clientY, e.timeStamp);
   });

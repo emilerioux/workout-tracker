@@ -13,7 +13,8 @@ const K = {
   notes:     "wt2-notes",
   prs:       "wt2-prs",
   sessions:  "wt2-sessions",
-  hint:      "wt2-hint-seen",
+  journal:   "wt2-journal",
+  hint:     "wt2-hint-seen",
   accentFix: "wt2-accents-v1",
   groupFix: "wt2-groups-v1",
   tab:       "wt2-tab",
@@ -54,6 +55,10 @@ const DB = {
   notes:      load(K.notes, {}),
   prs:        load(K.prs, {}),
   sessions:   load(K.sessions, []),
+  /* Les notes de séance : { id, date, createdAt, programId,
+     programName, text }. Une par séance, pas par jour — deux
+     séances le même jour gardent chacune la leur. */
+  journal:    load(K.journal, []),
 };
 
 const persist = {
@@ -63,7 +68,35 @@ const persist = {
   notes:      () => save(K.notes, DB.notes),
   prs:        () => save(K.prs, DB.prs),
   sessions:   () => save(K.sessions, DB.sessions),
+  journal:    () => save(K.journal, DB.journal),
 };
+
+/* ── Cardio ─────────────────────────────────────────────────
+   Un exercice cardio porte `kind: "cardio"`, dans le programme
+   comme dans l'historique. Pas de poids ni de reps : une durée
+   (obligatoire), une distance et des calories (facultatives), et
+   une intensité sur trois niveaux. Il n'entre jamais dans un
+   record ni dans un volume en lb. */
+const INTENSITY = ["", "Facile", "Modéré", "Intense"];
+const cardioLog = (l) => !!l && l.kind === "cardio";
+
+/* Un nom est « cardio » s'il a déjà été rangé comme tel quelque
+   part — sert à pré-choisir le bon type dans les formulaires. */
+function isCardio(name) {
+  if (!name) return false;
+  if (DB.logs.some((l) => l.exercise === name && cardioLog(l))) return true;
+  return DB.programs.some((p) => p.exercises.some((e) => e.name === name && e.kind === "cardio"));
+}
+
+/* « 32 min · 5,2 km · 310 cal · Modéré » — les champs vides tombent. */
+function cardioText(l) {
+  return [
+    `${fmt(l.minutes)} min`,
+    l.distance ? `${fmt(l.distance)} km` : null,
+    l.calories ? `${Math.round(l.calories)} cal` : null,
+    INTENSITY[l.intensity] || null,
+  ].filter(Boolean).join(" · ");
+}
 
 /* ── Dérivés ──────────────────────────────────────────────── */
 
@@ -80,7 +113,7 @@ function allExercises() {
 function bestWeight(name) {
   let best = 0;
   for (const l of DB.logs) {
-    if (l.exercise !== name) continue;
+    if (l.exercise !== name || cardioLog(l)) continue;
     const w = l.perSet ? Math.max(...l.perSet.map((s) => s.weight)) : l.weight;
     if (w > best) best = w;
   }
@@ -97,15 +130,21 @@ function lastEntry(name) {
   return best;
 }
 
-const volumeOf = (l) =>
+const volumeOf = (l) => cardioLog(l) ? 0 :
   l.perSet ? l.perSet.reduce((n, s) => n + s.weight * s.reps, 0) : (l.weight * l.reps * l.sets);
 
-/* Un point par séance, du plus ancien au plus récent. */
+/* Un point par séance, du plus ancien au plus récent. Pour le
+   cardio, `metric` vaut "minutes" ou "distance" ; une séance sans
+   distance notée n'a pas de point sur la courbe des distances. */
 function seriesFor(name, metric) {
   return DB.logs
     .filter((l) => l.exercise === name)
     .sort((a, b) => a.createdAt - b.createdAt)
+    .filter((l) => !(cardioLog(l) && metric === "distance" && !l.distance))
     .map((l) => {
+      if (cardioLog(l)) {
+        return { x: l.createdAt, y: metric === "distance" ? l.distance : l.minutes, date: l.date, log: l };
+      }
       const top = l.perSet ? l.perSet.reduce((a, b) => (b.weight > a.weight ? b : a)) : null;
       const value = metric === "reps"
         ? (top ? top.reps : l.reps)
@@ -141,13 +180,29 @@ function addLog(entry) {
   DB.logs.push(log);
   persist.logs();
 
-  const top = log.perSet ? Math.max(...log.perSet.map((s) => s.weight)) : log.weight;
   const prev = DB.prs[log.exercise] ?? 0;
   let pr = false;
-  if (top > prev) { DB.prs[log.exercise] = top; persist.prs(); pr = true; }
+  if (!cardioLog(log)) {
+    const top = log.perSet ? Math.max(...log.perSet.map((s) => s.weight)) : log.weight;
+    if (top > prev) { DB.prs[log.exercise] = top; persist.prs(); pr = true; }
+  }
 
   if (!DB.sessions.includes(log.date)) { DB.sessions.push(log.date); persist.sessions(); }
   return { log, pr, prev };
+}
+
+/* Réécrit une entrée existante — en séance, un exercice déjà écrit
+   dans l'historique peut encore recevoir une série de plus. */
+function updateLog(id, fields) {
+  const l = DB.logs.find((x) => x.id === id);
+  if (!l) return null;
+  Object.assign(l, fields);
+  persist.logs();
+  if (!cardioLog(l)) {
+    const best = bestWeight(l.exercise);
+    if (best > (DB.prs[l.exercise] ?? 0)) { DB.prs[l.exercise] = best; persist.prs(); }
+  }
+  return l;
 }
 
 function deleteLog(id) {
@@ -256,6 +311,7 @@ function importOldApp() {
   DB.sessions = [...days];
 
   DB.logs.forEach((l) => {
+    if (cardioLog(l)) return;
     const top = l.perSet ? Math.max(...l.perSet.map((x) => x.weight)) : l.weight;
     if (top > (DB.prs[l.exercise] ?? 0)) DB.prs[l.exercise] = top;
   });
@@ -283,7 +339,7 @@ function importJSON(file, done) {
       const p = JSON.parse(r.result);
       const d = p.data || p;
       if (!d || typeof d !== "object") throw new Error("format");
-      ["programs", "logs", "bodyweight", "sessions"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
+      ["programs", "logs", "bodyweight", "sessions", "journal"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
       ["notes", "prs"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
       Object.values(persist).forEach((f) => f());
       done(null);
