@@ -259,11 +259,16 @@ function initEdgeBack() {
 
 /* ── Sélecteur d'exercice (recherche + création) ──────────── */
 /* `create: false` quand on ne fait que choisir parmi l'existant
-   (Progrès) : y créer un exercice n'aurait aucun sens. */
-function pickExercise(current, onPick, { create = true } = {}) {
-  const names = allExercises();
+   (Progrès) : y créer un exercice n'aurait aucun sens.
+   `kind` ("cardio" ou "force") ne montre que les exercices de ce
+   type : en ajoutant un cardio, un squat dans la liste ne sert à
+   rien. Sans `kind`, tout est proposé. */
+function pickExercise(current, onPick, { create = true, kind = null } = {}) {
+  const every = allExercises();
+  const names = kind ? every.filter((n) => (kind === "cardio") === isCardio(n)) : every;
+  const other = kind === "cardio" ? "musculation" : "cardio";
   openSheet(
-    `<h2 class="sheet-h">Exercice</h2>
+    `<h2 class="sheet-h">${kind === "cardio" ? "Exercice cardio" : kind === "force" ? "Exercice de musculation" : "Exercice"}</h2>
      <input type="search" class="input search" id="ex-search" placeholder="${create ? "Chercher ou créer…" : "Chercher…"}" autocomplete="off">
      <div class="pick-list" id="ex-pick-list"></div>`
   );
@@ -278,12 +283,16 @@ function pickExercise(current, onPick, { create = true } = {}) {
       hits.map((n) => `<button type="button" class="pick-row${n === current ? " on" : ""}" data-name="${esc(n)}">
           <span>${esc(n)}</span>${n === current ? '<svg viewBox="0 0 24 24" class="tick"><path d="m5 12.5 4.5 4.5L19 7"/></svg>' : ""}
         </button>`).join("") +
-      (create && search.value.trim() && !names.some((n) => n.toLowerCase() === q)
+      /* Un nom qui existe déjà de l'AUTRE type n'est pas recréé :
+         deux exercices du même nom se mélangeraient partout. */
+      (create && search.value.trim() && !every.some((n) => n.toLowerCase() === q)
         ? `<button type="button" class="pick-row create" data-name="${esc(search.value.trim())}">
              <span>Créer « ${esc(search.value.trim())} »</span>
              <svg viewBox="0 0 24 24" class="tick"><path d="M12 5v14M5 12h14"/></svg></button>`
         : "") +
-      (!hits.length && !search.value.trim() ? `<p class="muted pad">Aucun exercice pour l'instant.${create ? " Tape un nom pour en créer un." : ""}</p>` : "") +
+      (kind && search.value.trim() && !names.some((n) => n.toLowerCase() === q) && every.some((n) => n.toLowerCase() === q)
+        ? `<p class="muted pad">« ${esc(search.value.trim())} » existe déjà comme exercice de ${other}.</p>` : "") +
+      (!hits.length && !search.value.trim() ? `<p class="muted pad">${kind === "cardio" ? "Aucun exercice cardio" : kind === "force" ? "Aucun exercice de musculation" : "Aucun exercice"} pour l'instant.${create ? " Tape un nom pour en créer un." : ""}</p>` : "") +
       (!create && !hits.length && search.value.trim() ? `<p class="muted pad">Aucun exercice ne correspond.</p>` : "");
   };
   draw();
@@ -362,9 +371,171 @@ function renderBackup() {
   });
 }
 
+/* ── Objectifs ──────────────────────────────────────────────
+   Une barre par objectif, une seule couleur (l'accent) : la barre
+   dit « où j'en suis », le texte dit les chiffres. Les objectifs
+   en cours d'abord, les atteints ensuite (les 3 plus récents). */
+const daysLeft = (dateStr) => Math.ceil((new Date(dateStr + "T23:59:59") - Date.now()) / 86400000);
+
+function renderGoals() {
+  const host = $("goals-card");
+  if (!DB.logs.length && !DB.goals.length) { host.innerHTML = ""; return; }
+  const active = DB.goals.filter((g) => !g.doneAt);
+  const done = DB.goals.filter((g) => g.doneAt).sort((a, b) => b.doneAt - a.doneAt).slice(0, 3);
+  const row = (g) => {
+    const { cur, p } = goalProgress(g), u = GOAL_UNIT[g.metric];
+    let sub;
+    if (g.doneAt) {
+      const d = new Date(g.doneAt);
+      sub = `Atteint le ${d.getDate()} ${MOIS_L[d.getMonth()]}`;
+    } else {
+      const left = g.target - cur;
+      const dl = g.deadline ? daysLeft(g.deadline) : null;
+      sub = [`reste ${fmt(left)} ${u}`,
+        dl == null ? null : dl > 1 ? `${dl} jours` : dl === 1 ? "dernier jour" : "échéance passée"].filter(Boolean).join(" · ");
+    }
+    return `<button type="button" class="goal${g.doneAt ? " done" : ""}" data-goal="${esc(g.id)}"
+        aria-label="${esc(g.exercise)} : ${fmt(cur)} sur ${fmt(g.target)} ${u}">
+        <span class="goal-top"><b>${esc(g.exercise)}</b>
+          <span class="tnum">${g.doneAt ? `${CHECK_PATH}` : ""}${fmt(Math.min(cur, g.target))} / ${fmt(g.target)} ${u}</span></span>
+        <span class="goal-track"><span class="goal-fill" style="width:${Math.round(p * 100)}%"></span></span>
+        <span class="goal-sub">${sub}</span>
+      </button>`;
+  };
+  host.innerHTML =
+    `<section class="card-surface goals-card" aria-label="Objectifs">
+       <header class="week-head"><h3>Objectifs</h3>
+         <button type="button" class="mini-btn" id="goal-add">
+           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter</button></header>
+       ${active.length || done.length
+         ? `<div class="goal-list">${active.map(row).join("")}${done.map(row).join("")}</div>`
+         : `<p class="goal-empty">Un poids à atteindre sur un exercice, ou une distance en cardio — avec une date si tu veux.</p>`}
+     </section>`;
+  $("goal-add").addEventListener("click", () => goalSheet());
+  host.querySelectorAll("[data-goal]").forEach((b) => b.addEventListener("click", () => {
+    const g = DB.goals.find((x) => x.id === b.dataset.goal);
+    if (g) goalSheet({ ...g });
+  }));
+}
+
+/* Créer ou modifier un objectif. `g` voyage en paramètre à travers
+   le sélecteur d'exercice (même raison que addExerciseSheet). */
+function goalSheet(g = null) {
+  const isNew = !g || !DB.goals.some((x) => x.id === g.id);
+  g = g || { id: uid(), exercise: "", metric: "weight", target: null, deadline: null };
+  const cardio = g.exercise && isCardio(g.exercise);
+  if (g.exercise && !cardio) g.metric = "weight";
+  if (cardio && g.metric === "weight") g.metric = "distance";
+  const cur = g.exercise ? goalLevel(g.exercise, g.metric) : null;
+  const u = GOAL_UNIT[g.metric];
+
+  openSheet(
+    `<p class="sheet-kicker">${isNew ? "Nouvel objectif" : "Objectif"}</p>
+     <h2 class="sheet-h">${g.exercise ? esc(g.exercise) : "Choisis un exercice"}</h2>
+     <button type="button" class="picker-pill wide${g.exercise ? " filled" : ""}" id="goal-pick">
+       <span>${g.exercise ? esc(g.exercise) : "Choisir un exercice"}</span>
+       <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+     ${cardio ? `<div class="segmented" id="goal-metric">
+         <button type="button" data-m="distance" class="${g.metric === "distance" ? "on" : ""}">Distance</button>
+         <button type="button" data-m="minutes" class="${g.metric === "minutes" ? "on" : ""}">Durée</button></div>` : ""}
+     ${g.exercise ? `<p class="muted">Actuellement : <b>${cur ? `${fmt(cur)} ${u}` : "rien encore"}</b>${g.metric === "weight" ? " (ton record)" : " (ta meilleure séance)"}</p>` : ""}
+     <div class="row2">
+       <div class="field"><label for="goal-target">Objectif (${u})</label>
+         <input class="input" id="goal-target" type="number" inputmode="decimal" step="any" min="0" value="${g.target ?? ""}"
+                placeholder="${cur ? fmt(cur + (g.metric === "weight" ? 20 : g.metric === "distance" ? 1 : 10)) : ""}"></div>
+       <div class="field"><label for="goal-date">Pour le (facultatif)</label>
+         <input class="input" id="goal-date" type="date" min="${today()}" value="${esc(g.deadline || "")}"></div>
+     </div>
+     <button class="primary" id="goal-save"><span class="primary-label">${isNew ? "Fixer l'objectif" : "Enregistrer"}</span></button>
+     ${isNew ? "" : `<button class="ghost-btn danger-btn" id="goal-del">Supprimer l'objectif</button>`}`
+  );
+
+  const grab = () => {
+    const t = Number($("goal-target").value.replace(",", "."));
+    g.target = t > 0 ? t : null;
+    g.deadline = $("goal-date").value || null;
+  };
+  $("goal-pick").addEventListener("click", () => {
+    grab();
+    closeSheet();
+    onSheetClose = () => pickExercise(g.exercise, (name) => { g.exercise = name; g.target = null; goalSheet(g); }, { create: false });
+  });
+  if (cardio) $("goal-metric").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-m]");
+    if (!b || b.dataset.m === g.metric) return;
+    grab(); g.metric = b.dataset.m; g.target = null;
+    closeSheet();
+    onSheetClose = () => goalSheet(g);
+  });
+  $("goal-save").addEventListener("click", () => {
+    grab();
+    if (!g.exercise) { toast("Choisis d'abord un exercice"); return; }
+    if (!g.target) { toast(`Entre un objectif en ${u}`); return; }
+    if (isNew && cur && g.target <= cur) { toast(`Tu es déjà à ${fmt(cur)} ${u} — vise plus haut`); return; }
+    const i = DB.goals.findIndex((x) => x.id === g.id);
+    if (i >= 0) {
+      /* Un objectif relevé au-dessus du niveau actuel redevient en cours. */
+      if (g.doneAt && g.target > goalLevel(g.exercise, g.metric)) g.doneAt = null;
+      DB.goals[i] = g;
+    } else {
+      DB.goals.push({ ...g, start: cur || 0, createdAt: Date.now(), doneAt: null });
+    }
+    persist.goals();
+    closeSheet();
+    onSheetClose = () => { renderGoals(); buzz(9); toast(isNew ? "Objectif fixé — let's go" : "Objectif mis à jour"); };
+  });
+  if (!isNew) $("goal-del").addEventListener("click", () => {
+    DB.goals = DB.goals.filter((x) => x.id !== g.id);
+    persist.goals();
+    closeSheet();
+    onSheetClose = () => { renderGoals(); toast("Objectif supprimé"); };
+  });
+}
+
+/* ── Jalons ──────────────────────────────────────────────────
+   Une ligne compacte sur Programmes (combien, et le prochain à
+   portée) ; toute la collection dans une feuille. */
+function renderBadges() {
+  const host = $("badges-card");
+  if (!DB.logs.length) { host.innerHTML = ""; return; }
+  const all = badgeList();
+  const got = all.filter((b) => b.earned).length;
+  /* Le prochain = le moins loin, en proportion. */
+  const next = all.filter((b) => !b.earned).sort((a, b) => b.value / b.n - a.value / a.n)[0];
+  host.innerHTML =
+    `<button type="button" class="card-surface badges-row" id="badges-open">
+       <span class="badges-count"><b class="tnum">${got}</b><i>/ ${all.length}</i></span>
+       <span class="badges-txt"><b>Jalons</b>
+         <em>${next ? `Prochain : ${esc(next.title)} — ${badgeValue(next)} / ${esc(next.big)}` : "Tout débloqué. Respect."}</em></span>
+       <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+     </button>`;
+  $("badges-open").addEventListener("click", badgesSheet);
+}
+const badgeValue = (b) => b.stat === "volume"
+  ? (b.value >= 1e6 ? `${fmt(b.value / 1e6)}M` : `${fmt(Math.floor(b.value / 100) / 10)}k`)
+  : fmt(Math.floor(b.value * 10) / 10);
+
+function badgesSheet() {
+  const all = badgeList();
+  openSheet(
+    `<p class="sheet-kicker">${all.filter((b) => b.earned).length} sur ${all.length} débloqués</p>
+     <h2 class="sheet-h">Jalons</h2>
+     ${BADGE_GROUPS.map(([stat, label]) => `
+       <p class="block-key">${esc(label)}</p>
+       <div class="badge-grid">${all.filter((b) => b.stat === stat).map((b) => `
+         <div class="bdg${b.earned ? " on" : ""}" aria-label="${esc(b.title)} — ${b.earned ? "débloqué" : `${badgeValue(b)} sur ${b.big}`}">
+           <span class="bdg-big tnum">${esc(b.big)}</span>
+           <span class="bdg-unit">${esc(b.unit)}</span>
+           ${b.earned ? "" : `<span class="bdg-track"><span style="width:${Math.min(100, Math.round((b.value / b.n) * 100))}%"></span></span>`}
+         </div>`).join("")}</div>`).join("")}`
+  );
+}
+
 function renderPrograms() {
   renderWeek();
   renderBackup();
+  renderGoals();
+  renderBadges();
   const host = $("program-list");
   const n = streakWeeks();
   $("prog-sub").textContent = DB.programs.length
@@ -561,7 +732,7 @@ function editProgram(existing) {
             aria-label="Couleur ${i + 1}${taken.has(i) ? " — déjà prise par un autre programme" : ""}"></button>`).join("")}
        </div>
        <p class="block-key">Exercices</p>
-       <p class="fineprint" style="margin:-4px 0 10px">Glisse la poignée pour changer l'ordre. Le maillon lie un exercice à celui du dessus — les deux deviennent un superset.</p>
+       <p class="fineprint" style="margin:-4px 0 10px">Touche un exercice pour le modifier. Glisse la poignée pour changer l'ordre. Le maillon lie un exercice à celui du dessus — les deux deviennent un superset.</p>
        <div id="draft-list" class="draft-list"></div>
        <button class="tile-btn" id="add-ex">
          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter un exercice
@@ -615,6 +786,23 @@ function editProgram(existing) {
         draft.exercises.splice(Number(row.dataset.i), 1);
         drawDraft();
       } });
+      /* Toucher la rangée modifie l'exercice : lequel, ses séries,
+         ses reps (ou sa durée). Le maillon et la poignée gardent
+         leur propre rôle ; une rangée glissée se referme d'abord. */
+      row.addEventListener("click", (e) => {
+        if (!e.target.closest(".swipe-surface") || e.target.closest(".link-btn, .drag-handle")) return;
+        if (row._swipeOpen && row._swipeOpen()) { row._closeSwipe(); return; }
+        const i = Number(row.dataset.i), cur = draft.exercises[i];
+        buzz(6);
+        addExerciseSheet({
+          edit: cur,
+          onAdd: (ex) => {
+            /* Le groupe (superset) et la place ne bougent pas. */
+            draft.exercises[i] = { ...ex, group: cur.group };
+            drawDraft();
+          },
+        });
+      });
     });
 
     /* Glisser la poignée réordonne ; le clavier aussi, sinon
@@ -684,14 +872,18 @@ const exSub = (e) => e.kind === "cardio"
    reconstruite après le sélecteur, et une variable locale y serait
    remise à zéro — le choix serait perdu sans que rien ne le dise. */
 function addExerciseSheet(ctx, picked = "", kind = null) {
+  /* `ctx.edit` : on modifie un exercice déjà dans le programme. Ses
+     propres séries/reps/durée priment sur « la dernière fois ». */
+  const ed = ctx.edit || null;
+  if (ed && !picked) { picked = ed.name; kind = ed.kind === "cardio" ? "cardio" : "force"; }
   if (picked && isCardio(picked)) kind = "cardio";
   kind = kind || "force";
   const last = picked ? lastEntry(picked) : null;
-  const lf = last && !cardioLog(last) ? last : null;
-  const lc = cardioLog(last) ? last : null;
+  const lf = ed && ed.kind !== "cardio" ? { sets: ed.sets ?? "", reps: ed.reps ?? "" } : last && !cardioLog(last) ? last : null;
+  const lc = ed && ed.kind === "cardio" ? (ed.minutes ? { minutes: ed.minutes } : null) : cardioLog(last) ? last : null;
   const prev = ctx.prev;
   openSheet(
-    `<h2 class="sheet-h">Ajouter un exercice</h2>
+    `<h2 class="sheet-h">${ed ? "Modifier l'exercice" : "Ajouter un exercice"}</h2>
      <div class="segmented" id="ex-kind" role="radiogroup" aria-label="Type d'exercice">
        <button type="button" data-kind="force" class="${kind === "force" ? "on" : ""}">Musculation</button>
        <button type="button" data-kind="cardio" class="${kind === "cardio" ? "on" : ""}">Cardio</button>
@@ -709,15 +901,15 @@ function addExerciseSheet(ctx, picked = "", kind = null) {
            <input class="input" id="ex-reps" placeholder="8-10" autocomplete="off"
                   value="${lf ? esc(String(lf.reps)) : ""}"></div>
        </div>
-       ${prev && prev.kind !== "cardio" && !ctx.session ? `<label class="check-row"><input type="checkbox" id="ex-ss"><span>Superset avec « ${esc(prev.name)} »</span></label>` : ""}
+       ${prev && prev.kind !== "cardio" && !ctx.session && !ed ? `<label class="check-row"><input type="checkbox" id="ex-ss"><span>Superset avec « ${esc(prev.name)} »</span></label>` : ""}
      </div>
      <div data-for="cardio" ${kind === "cardio" ? "" : "hidden"}>
        <div class="field"><label for="ex-min">Durée visée (min) — facultative</label>
          <input class="input" id="ex-min" type="number" min="1" inputmode="numeric"
                 placeholder="20" value="${lc ? fmt(lc.minutes) : ""}"></div>
      </div>
-     ${ctx.session ? `<label class="check-row"><input type="checkbox" id="ex-keep"><span>Le garder aussi dans le programme</span></label>` : ""}
-     <button class="primary" id="ex-add"><span class="primary-label">Ajouter</span></button>`
+     ${ctx.session && ctx.keepable !== false ? `<label class="check-row"><input type="checkbox" id="ex-keep"><span>Le garder aussi dans le programme</span></label>` : ""}
+     <button class="primary" id="ex-add"><span class="primary-label">${ed ? "Enregistrer" : "Ajouter"}</span></button>`
   );
 
   /* Le type se change sur place : rouvrir la feuille ferait
@@ -728,6 +920,12 @@ function addExerciseSheet(ctx, picked = "", kind = null) {
     kind = b.dataset.kind;
     $("ex-kind").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
     $("sheet-body").querySelectorAll("[data-for]").forEach((x) => { x.hidden = x.dataset.for !== kind; });
+    /* Un exercice déjà choisi de l'autre type ne suit pas : un
+       squat ne devient pas du cardio parce qu'on a changé d'onglet. */
+    if (picked && allExercises().includes(picked) && (kind === "cardio") !== isCardio(picked)) {
+      picked = "";
+      $("pick-ex").classList.remove("filled");
+    }
     if (!picked) $("pick-ex-label").textContent = kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice";
     buzz(6);
     measureSheet();
@@ -735,7 +933,7 @@ function addExerciseSheet(ctx, picked = "", kind = null) {
 
   $("pick-ex").addEventListener("click", () => {
     closeSheet();
-    onSheetClose = () => pickExercise(picked, (name) => addExerciseSheet(ctx, name, kind));
+    onSheetClose = () => pickExercise(picked, (name) => addExerciseSheet(ctx, name, kind), { kind });
   });
 
   $("ex-add").addEventListener("click", () => {
@@ -1145,7 +1343,10 @@ function editLogSheet(id) {
     }
     editLog(id, fields);
     closeSheet();
-    onSheetClose = () => { renderHistory(); renderProgress(); renderPrograms(); toast("Entrée corrigée"); buzz(9); };
+    onSheetClose = () => {
+      renderHistory(); renderProgress(); renderPrograms();
+      if (!celebrateOutside()) { toast("Entrée corrigée"); buzz(9); }
+    };
   });
 }
 
@@ -1233,6 +1434,11 @@ function quickLogSheet(picked = "", kind = null) {
     kind = b.dataset.kind;
     $("ql-kind").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
     $("sheet-body").querySelectorAll("[data-for]").forEach((x) => { x.hidden = x.dataset.for !== kind; });
+    if (picked && allExercises().includes(picked) && (kind === "cardio") !== isCardio(picked)) {
+      picked = "";
+      $("ql-pick").classList.remove("filled");
+      $("sheet-body").querySelectorAll(".fineprint").forEach((p) => { p.textContent = ""; });
+    }
     if (!picked) $("ql-label").textContent = kind === "cardio" ? "Choisir — ex. Tapis roulant" : "Choisir un exercice";
     buzz(6);
     measureSheet();
@@ -1247,7 +1453,7 @@ function quickLogSheet(picked = "", kind = null) {
 
   $("ql-pick").addEventListener("click", () => {
     closeSheet();
-    onSheetClose = () => pickExercise(picked, (name) => quickLogSheet(name, kind));
+    onSheetClose = () => pickExercise(picked, (name) => quickLogSheet(name, kind), { kind });
   });
 
   $("ql-save").addEventListener("click", () => {
@@ -1262,7 +1468,7 @@ function quickLogSheet(picked = "", kind = null) {
       onSheetClose = () => {
         calToNow();
         renderHistory(); renderProgress(); renderPrograms();
-        toast("Cardio ajouté"); buzz(9);
+        if (!celebrateOutside()) { toast("Cardio ajouté"); buzz(9); }
       };
       return;
     }
@@ -1273,10 +1479,24 @@ function quickLogSheet(picked = "", kind = null) {
     onSheetClose = () => {
       calToNow();
       renderHistory(); renderProgress(); renderPrograms();
+      if (celebrateOutside()) return;
       if (res.pr) { toast(`🏆 Record : ${fmt(w)} lb`); buzz([14, 45, 22]); }
       else { toast("Entrée ajoutée"); buzz(9); }
     };
   });
+}
+
+/* Hors séance (entrée manuelle, correction), un objectif atteint
+   ou un jalon débloqué se fête par un toast. Renvoie vrai s'il y
+   avait quelque chose à fêter. */
+function celebrateOutside() {
+  const goals = checkGoals(), badges = newBadges();
+  if (!goals.length && !badges.length) return false;
+  const g = goals[0], b = badges[0];
+  toast(g ? `Objectif atteint : ${g.exercise} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}` : `Jalon débloqué : ${b.title}`);
+  buzz([12, 40, 12, 40, 24]);
+  renderPrograms();
+  return true;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1626,6 +1846,8 @@ function editExerciseSheet(name) {
      ${isCardio(name) ? "" : `<p class="block-key">Muscle principal</p>${muscleChips(name)}`}
      <div class="field"><label for="ex-note">Note technique</label>
        <textarea class="input" id="ex-note" rows="3" placeholder="Ex : grip large, coudes serrés">${esc(DB.notes[name] || "")}</textarea></div>
+     <div class="field"><label for="ex-url">Vidéo de technique</label>
+       <input class="input" id="ex-url" type="url" inputmode="url" autocomplete="off" placeholder="Colle un lien YouTube, TikTok…" value="${esc(DB.links[name] || "")}"></div>
      <p class="fineprint">Renommer met à jour l'historique, les programmes et les records d'un coup.</p>
      <button class="primary" id="ex-save"><span class="primary-label">Enregistrer</span></button>`
   );
@@ -1635,10 +1857,13 @@ function editExerciseSheet(name) {
     const nn = $("ex-rename").value.trim();
     if (muscle) setMuscle(name, muscle);
     const note = $("ex-note").value.trim();
+    const url = cleanUrl($("ex-url").value);
     if (!nn) { toast("Le nom ne peut pas être vide"); return; }
+    if (url === null) { toast("Ce lien n'a pas l'air d'une adresse web"); return; }
     if (nn !== name) renameExercise(name, nn);
     if (note) DB.notes[nn] = note; else delete DB.notes[nn];
-    persist.notes();
+    if (url) DB.links[nn] = url; else delete DB.links[nn];
+    persist.notes(); persist.links();
     closeSheet();
     onSheetClose = () => { refreshAll(); toast("Exercice mis à jour"); };
   });

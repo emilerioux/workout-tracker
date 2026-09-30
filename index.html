@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=23">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -30,10 +30,18 @@
         <div id="backup-card"></div>
         <div id="week-card"></div>
         <div id="program-list" class="prog-list"></div>
-        <button class="tile-btn" id="new-program-btn">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          Nouveau programme
-        </button>
+        <div class="tile-pair">
+          <button class="tile-btn" id="new-program-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Nouveau programme
+          </button>
+          <button class="tile-btn" id="free-session-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5v13l10.5-6.5z"/></svg>
+            Séance libre
+          </button>
+        </div>
+        <div id="goals-card"></div>
+        <div id="badges-card"></div>
       </div>
     </section>
 
@@ -276,6 +284,10 @@
           <p class="block-key">Records battus</p>
           <ul class="pr-list" id="pr-list"></ul>
         </div>
+        <div class="sheet-block" id="win-block" hidden>
+          <p class="block-key">À fêter</p>
+          <ul class="win-list" id="win-list"></ul>
+        </div>
         <div class="sheet-block">
           <label class="block-key" for="session-note">Note sur la séance</label>
           <textarea class="input" id="session-note" rows="2" placeholder="Ex : mal dormi, énergie basse — ou grosse séance"></textarea>
@@ -286,6 +298,7 @@
           <div class="cal" id="cal" aria-hidden="true"></div>
           <p class="cal-legend"><span class="cal-swatch"></span> jours d'entraînement · 5 dernières semaines</p>
         </div>
+        <button class="ghost-btn save-as" id="save-as-prog" hidden>Enregistrer cette séance comme programme</button>
         <button class="primary sheet-cta" id="sheet-close"><span class="primary-label">Terminé</span></button>
       </div>
     </section>
@@ -309,13 +322,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=20"></script>
-<script src="js/motion.js?v=20"></script>
-<script src="js/data.js?v=20"></script>
-<script src="js/chart.js?v=20"></script>
-<script src="js/session.js?v=20"></script>
-<script src="js/views.js?v=20"></script>
-<script src="js/app.js?v=20"></script>
+<script src="js/theme.js?v=23"></script>
+<script src="js/motion.js?v=23"></script>
+<script src="js/data.js?v=23"></script>
+<script src="js/chart.js?v=23"></script>
+<script src="js/session.js?v=23"></script>
+<script src="js/views.js?v=23"></script>
+<script src="js/app.js?v=23"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

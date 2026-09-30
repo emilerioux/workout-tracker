@@ -17,6 +17,10 @@ const K = {
   muscles:   "wt2-muscles",
   lastExport:"wt2-last-export",
   backupSnooze: "wt2-backup-snooze",
+  goals:     "wt2-goals",
+  links:     "wt2-links",
+  live:      "wt2-live-session",
+  badges:    "wt2-badges-seen",
   hint:     "wt2-hint-seen",
   accentFix: "wt2-accents-v1",
   groupFix: "wt2-groups-v1",
@@ -65,6 +69,12 @@ const DB = {
   /* Muscle choisi à la main pour un exercice. Sans entrée ici,
      le muscle est deviné d'après le nom (guessMuscle). */
   muscles:    load(K.muscles, {}),
+  /* Objectifs : { id, exercise, metric ("weight" | "minutes" |
+     "distance"), start, target, deadline|null, createdAt,
+     doneAt|null }. `start` = le niveau au moment de le fixer. */
+  goals:      load(K.goals, []),
+  /* Lien vers une vidéo de technique, par nom d'exercice. */
+  links:      load(K.links, {}),
 };
 
 const persist = {
@@ -76,6 +86,8 @@ const persist = {
   sessions:   () => save(K.sessions, DB.sessions),
   journal:    () => save(K.journal, DB.journal),
   muscles:    () => save(K.muscles, DB.muscles),
+  goals:      () => save(K.goals, DB.goals),
+  links:      () => save(K.links, DB.links),
 };
 
 /* ── Cardio ─────────────────────────────────────────────────
@@ -236,6 +248,96 @@ function setsByMuscle(k, n) {
   return out;
 }
 
+/* ── Objectifs ─────────────────────────────────────────────
+   Un objectif vise un niveau sur UN exercice : un poids (le
+   record) en musculation, une durée ou une distance (la meilleure
+   séance) en cardio. Atteint une fois = atteint pour de bon, même
+   si une correction fait redescendre le record ensuite. */
+const GOAL_UNIT = { weight: "lb", minutes: "min", distance: "km" };
+
+function goalLevel(exercise, metric) {
+  if (metric === "weight") return DB.prs[exercise] ?? bestWeight(exercise);
+  return DB.logs
+    .filter((l) => l.exercise === exercise && cardioLog(l))
+    .reduce((m, l) => Math.max(m, Number(l[metric]) || 0), 0);
+}
+
+function goalProgress(g) {
+  const cur = goalLevel(g.exercise, g.metric);
+  const span = g.target - g.start;
+  const p = g.doneAt ? 1 : span > 0 ? Math.max(0, Math.min(1, (cur - g.start) / span)) : (cur >= g.target ? 1 : 0);
+  return { cur, p };
+}
+
+/* Marque les objectifs qui viennent d'être atteints et les renvoie. */
+function checkGoals() {
+  const hit = [];
+  DB.goals.forEach((g) => {
+    if (!g.doneAt && goalLevel(g.exercise, g.metric) >= g.target) { g.doneAt = Date.now(); hit.push(g); }
+  });
+  if (hit.length) persist.goals();
+  return hit;
+}
+
+/* ── Jalons ────────────────────────────────────────────────
+   Calculés à partir de l'historique, jamais stockés : seul ce
+   qui a déjà été FÊTÉ est retenu (wt2-badges-seen), pour ne
+   célébrer chaque jalon qu'une fois. */
+const BADGES = [
+  ...[1, 10, 25, 50, 100, 250].map((n) => ({ id: `s${n}`, stat: "sessions", n, big: String(n), unit: n > 1 ? "séances" : "séance",
+    title: n === 1 ? "Première séance" : `${n} séances` })),
+  ...[4, 8, 12, 26, 52].map((n) => ({ id: `w${n}`, stat: "streak", n, big: String(n), unit: "semaines",
+    title: `${n} semaines d'affilée` })),
+  ...[10000, 100000, 500000, 1000000].map((n) => ({ id: `v${n}`, stat: "volume", n, big: n >= 1e6 ? "1M" : `${n / 1000}k`, unit: "lb",
+    title: `${n.toLocaleString("fr-CA")} lb soulevées` })),
+  ...[10, 50, 100, 250].map((n) => ({ id: `k${n}`, stat: "km", n, big: String(n), unit: "km", title: `${n} km de cardio` })),
+  ...[10, 50].map((n) => ({ id: `h${n}`, stat: "hours", n, big: String(n), unit: "heures", title: `${n} h de cardio` })),
+];
+const BADGE_GROUPS = [["sessions", "Séances"], ["streak", "Constance"], ["volume", "Volume"], ["km", "Cardio — distance"], ["hours", "Cardio — temps"]];
+
+/* La plus longue suite de semaines avec au moins une séance. */
+function bestStreak() {
+  const weeks = new Set(DB.sessions.map((d) => iso(mondayOf(new Date(d + "T00:00:00")))));
+  let best = 0;
+  weeks.forEach((w) => {
+    const prev = new Date(w + "T00:00:00"); prev.setDate(prev.getDate() - 7);
+    if (weeks.has(iso(prev))) return;              // pas le début d'une suite
+    let n = 0;
+    const cur = new Date(w + "T00:00:00");
+    while (weeks.has(iso(cur))) { n++; cur.setDate(cur.getDate() + 7); }
+    best = Math.max(best, n);
+  });
+  return best;
+}
+
+function badgeStats() {
+  return {
+    sessions: DB.sessions.length,
+    streak: bestStreak(),
+    volume: DB.logs.reduce((n, l) => n + volumeOf(l), 0),
+    km: DB.logs.reduce((n, l) => n + (cardioLog(l) ? Number(l.distance) || 0 : 0), 0),
+    hours: DB.logs.reduce((n, l) => n + (cardioLog(l) ? Number(l.minutes) || 0 : 0), 0) / 60,
+  };
+}
+
+function badgeList() {
+  const s = badgeStats();
+  return BADGES.map((b) => ({ ...b, value: s[b.stat], earned: s[b.stat] >= b.n }));
+}
+
+/* Les jalons gagnés depuis la dernière fois. Au tout premier appel,
+   ce qui est déjà acquis est noté sans fête : quelqu'un qui a déjà
+   80 séances ne veut pas quinze bandeaux d'un coup. */
+function newBadges() {
+  const earned = badgeList().filter((b) => b.earned);
+  const raw = localStorage.getItem(K.badges);
+  const seen = new Set(raw ? JSON.parse(raw) : []);
+  const fresh = raw ? earned.filter((b) => !seen.has(b.id)) : [];
+  earned.forEach((b) => seen.add(b.id));
+  try { localStorage.setItem(K.badges, JSON.stringify([...seen])); } catch (_) {}
+  return fresh;
+}
+
 /* ── Rappel de sauvegarde ──────────────────────────────────
    Les données ne vivent QUE dans le téléphone. Au-delà de 30
    jours sans export (ou jamais, une fois qu'il y a deux semaines
@@ -333,6 +435,11 @@ function renameExercise(from, to) {
   DB.logs.forEach((l) => { if (l.exercise === from) l.exercise = to; });
   DB.programs.forEach((p) => p.exercises.forEach((e) => { if (e.name === from) e.name = to; }));
   if (DB.notes[from] !== undefined) { DB.notes[to] = DB.notes[from]; delete DB.notes[from]; }
+  if (DB.links[from] !== undefined) { DB.links[to] = DB.links[from]; delete DB.links[from]; persist.links(); }
+  if (DB.goals.some((g) => g.exercise === from)) {
+    DB.goals.forEach((g) => { if (g.exercise === from) g.exercise = to; });
+    persist.goals();
+  }
   if (DB.muscles[from] !== undefined) { DB.muscles[to] = DB.muscles[from]; delete DB.muscles[from]; persist.muscles(); }
   if (DB.prs[from] !== undefined) {
     DB.prs[to] = Math.max(DB.prs[to] ?? 0, DB.prs[from]);
@@ -450,8 +557,8 @@ function importJSON(file, done) {
       const p = JSON.parse(r.result);
       const d = p.data || p;
       if (!d || typeof d !== "object") throw new Error("format");
-      ["programs", "logs", "bodyweight", "sessions", "journal"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
-      ["notes", "prs", "muscles"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
+      ["programs", "logs", "bodyweight", "sessions", "journal", "goals"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
+      ["notes", "prs", "muscles", "links"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
       Object.values(persist).forEach((f) => f());
       done(null);
     } catch (e) { done(e); }

@@ -90,6 +90,8 @@ function initApp() {
 
   /* Programmes */
   $("new-program-btn").addEventListener("click", () => editProgram(null));
+  $("free-session-btn").addEventListener("click", () =>
+    startSession({ id: null, name: "Séance libre", free: true, exercises: [] }));
 
   /* Historique */
   $("quick-log-btn").addEventListener("click", quickLogSheet);
@@ -238,3 +240,8 @@ normalizeGroups();
 initApp();
 refreshAll();
 switchTab(TABS.includes(sessionStorage.getItem(K.tab)) ? sessionStorage.getItem(K.tab) : "programmes", { instant: true });
+/* Au tout premier lancement de cette version, les jalons déjà
+   acquis sont notés sans fête. */
+newBadges();
+/* Une séance interrompue (app fermée en plein milieu) reprend. */
+resumeLive();

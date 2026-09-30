@@ -126,35 +126,51 @@ function plateauOf(name) {
 }
 
 /* ── Ouverture ────────────────────────────────────────────── */
-function startSession(program) {
-  if (!program.exercises.length) { toast("Ce programme n'a pas encore d'exercices"); return; }
+/* `program.free` = séance libre : pas de programme, on ajoute les
+   exercices au fil de l'eau. `resume` = une séance interrompue
+   (app fermée, appel, batterie) qu'on rouvre là où elle était. */
+function startSession(program, resume = null) {
+  if (!resume && !program.free && !program.exercises.length) { toast("Ce programme n'a pas encore d'exercices"); return; }
 
   S.program = program;
-  S.exercises = program.exercises.map((e) => ({ ...e }));
+  if (resume) {
+    S.exercises = resume.exercises;
+    S.state = resume.state;
+    S.logIds = new Map(resume.logIds || []);
+    S.startedAt = resume.startedAt;
+    S.beatenPRs = resume.beatenPRs || [];
+    S.goalsHit = resume.goalsHit || [];
+    sEl("session-note").value = resume.note || "";
+  } else {
+    S.exercises = program.exercises.map((e) => ({ ...e }));
+    S.state = S.exercises.map(initState);
+    S.logIds = new Map();
+    S.startedAt = Date.now();
+    S.beatenPRs = [];
+    S.goalsHit = [];
+    sEl("session-note").value = "";
+  }
   S.blocks = groupBlocks(S.exercises);
-  S.idx = 0;
-  S.beatenPRs = [];
-  S.logIds = new Map();
-  S.startedAt = Date.now();
-  S.state = S.exercises.map(initState);
-  sEl("session-note").value = "";
+  S.idx = resume ? Math.max(0, Math.min(resume.idx || 0, S.blocks.length - 1)) : 0;
 
   buildCards();
   sEl("program-name").textContent = program.name;
   sEl("sheet-title").textContent = program.name;
-  sEl("head-count").textContent = `1 sur ${S.blocks.length}`;
+  headCount();
   sEl("stat-time").textContent = "0:00";
+  sEl("clock").textContent = mmss(Date.now() - S.startedAt);
 
   sessionRoot().hidden = false;
   S.open = true;
   document.body.classList.add("in-session");
   requestAnimationFrame(() => {
     sessionLayout();
-    sPos.hold(0);
-    progressS.hold(0);
+    sPos.hold(S.idx);
+    progressS.hold(doneSets() / (totalSets() || 1));
     updateButton();
     presentS.to(1, { damping: 1, response: 0.42 });
   });
+  saveLive();
 
   clearInterval(S.clockTimer);
   S.clockTimer = setInterval(() => {
@@ -177,7 +193,44 @@ const presentS = new Spring(0, { response: 0.42, damping: 1, restDelta: 0.003, o
   }
 } });
 
+/* ── Séance en cours, gardée au chaud ──────────────────────
+   Tout l'état de la séance est recopié dans localStorage à chaque
+   changement. Si l'app se ferme en pleine séance, la rouvrir y
+   ramène — jusqu'à 6 h plus tard ; au-delà, c'est une séance
+   oubliée, et ses séries sont déjà dans l'historique de toute
+   façon (chaque exercice bouclé s'y écrit tout de suite). */
+const LIVE_MAX = 6 * 3600 * 1000;
+
+function saveLive() {
+  if (!S.open || !S.program) return;
+  try {
+    localStorage.setItem(K.live, JSON.stringify({
+      program: { id: S.program.id || null, name: S.program.name, free: !!S.program.free },
+      exercises: S.exercises, state: S.state, logIds: [...S.logIds],
+      startedAt: S.startedAt, idx: S.idx, beatenPRs: S.beatenPRs, goalsHit: S.goalsHit,
+      note: sEl("session-note").value, savedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+function clearLive() { try { localStorage.removeItem(K.live); } catch (_) {} }
+
+function resumeLive() {
+  const d = load(K.live, null);
+  if (!d || !Array.isArray(d.exercises)) return false;
+  if (Date.now() - (d.savedAt || 0) > LIVE_MAX) { clearLive(); return false; }
+  const program = (d.program.id && DB.programs.find((p) => p.id === d.program.id))
+    || { id: d.program.id, name: d.program.name, free: d.program.free, exercises: [] };
+  startSession(program, d);
+  setTimeout(() => toast("Séance reprise là où tu l'avais laissée"), 500);
+  return true;
+}
+
+function headCount() {
+  sEl("head-count").textContent = S.blocks.length ? `${S.idx + 1} sur ${S.blocks.length}` : "aucun exercice";
+}
+
 function closeSession() {
+  clearLive();
   clearInterval(S.clockTimer);
   presentS.to(0, { damping: 1, response: 0.36 });
   refreshAll();
@@ -187,6 +240,18 @@ function closeSession() {
 function buildCards() {
   const stack = sEl("stack"), dotsEl = sEl("dots");
   stack.innerHTML = ""; dotsEl.innerHTML = "";
+
+  /* Séance libre qui commence : rien encore, on invite à ajouter. */
+  if (!S.blocks.length) {
+    stack.innerHTML =
+      `<article class="card"><div class="card-inner empty-session">
+         <span class="badge">Séance libre</span>
+         <h2 class="ex-name">Qu'est-ce qu'on fait aujourd'hui ?</h2>
+         <p class="ex-target">Ajoute un premier exercice — les suivants s'ajoutent au fil de la séance, avec le bouton sous chaque carte. À la fin, tu pourras en faire un programme.</p>
+       </div></article>`;
+    S.cards = []; S.dots = [];
+    return;
+  }
 
   S.cards = S.blocks.map((blk) => {
     const el = document.createElement("article");
@@ -232,7 +297,18 @@ function soloHead(i) {
   const note = DB.notes[ex.name];
   return `<h2 class="ex-name">${esc(ex.name)}</h2>` +
     `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
-    (note ? `<p class="ex-note">${esc(note)}</p>` : "");
+    (note ? `<p class="ex-note">${esc(note)}</p>` : "") +
+    techLink(ex.name);
+}
+
+/* Le lien vers la vidéo de technique : il s'ouvre à côté (YouTube,
+   TikTok…), la séance reste où elle est. */
+const LINK_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>';
+function techLink(name, withName = false) {
+  const url = DB.links[name];
+  if (!url) return "";
+  return `<a class="tech-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${LINK_IC}` +
+    `<span>${withName ? `${esc(name)} — ` : ""}voir la technique</span></a>`;
 }
 
 /* En-tête d'un superset : les noms enchaînés, puis le nombre de
@@ -250,7 +326,8 @@ function ssHead(blk) {
     `<h2 class="ex-name ss-title">${names}</h2>` +
     `<p class="ex-target"><b>${ssRounds(blk)}</b> tours<span class="dot-sep"></span>` +
     `<span>${blk.members.length} exercices enchaînés</span></p>` +
-    notes;
+    notes +
+    blk.members.map((i) => techLink(S.exercises[i].name, true)).join("");
 }
 
 /* La série en attente d'un bloc : on descend tour par tour, et dans
@@ -282,6 +359,8 @@ function renderCard(b) {
       }
     }
     appendSkipped(ol, blk);
+    appendAddMore(ol);
+    saveLive();
     return;
   }
 
@@ -299,6 +378,21 @@ function renderCard(b) {
     });
   }
   appendSkipped(ol, blk);
+  appendAddMore(ol);
+  saveLive();
+}
+
+/* En séance libre, on bâtit la séance au fil de l'eau : le bouton
+   pour ajouter l'exercice suivant est sous CHAQUE carte, là où on
+   regarde — pas caché dans le menu ⋯. */
+function appendAddMore(ol) {
+  if (!S.program || !S.program.free) return;
+  const li = document.createElement("li");
+  li.className = "add-more";
+  li.innerHTML = `<button type="button" class="tile-btn">` +
+    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un exercice</button>`;
+  li.querySelector("button").addEventListener("click", () => { buzz(8); addToSession(); });
+  ol.appendChild(li);
 }
 
 /* La bulle de progression : seulement avant la première série,
@@ -382,6 +476,7 @@ function cardioRow(i) {
     inp.addEventListener("input", () => {
       const v = inp.value.trim() === "" ? null : Number(inp.value.replace(",", "."));
       d[inp.dataset.k] = Number.isFinite(v) && v >= 0 ? v : null;
+      saveLive();
     });
   });
   li.querySelector(".intensity").addEventListener("click", (e) => {
@@ -479,6 +574,7 @@ function bindScrub(el, kind, i) {
     el.classList.remove("scrubbing");
     uncapture(el, e.pointerId);
     g = null;
+    saveLive();
   };
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
@@ -564,8 +660,9 @@ function setSessionIndex(i) {
   if (i === S.idx) return;
   S.idx = i;
   buzz(7);
-  sEl("head-count").textContent = `${i + 1} sur ${S.cards.length}`;
+  headCount();
   updateButton();
+  saveLive();
 }
 
 /* ── Progression, bouton ──────────────────────────────────── */
@@ -575,6 +672,12 @@ const fillS = new Spring(0, { response: 0.38, damping: 1, restDelta: 0.002,
   onUpdate: (v) => { const f = sEl("primary-fill"); f.style.transform = `scaleY(${v})`; f.style.opacity = String(v); } });
 
 function updateButton() {
+  if (!S.blocks.length) {
+    sEl("commit-label").textContent = "Ajouter un exercice";
+    sEl("commit").classList.add("go");
+    fillS.to(1);
+    return;
+  }
   const blk = S.blocks[S.idx], cell = activeCell(S.idx);
   let label, go;
   if (cell) {
@@ -637,6 +740,19 @@ function commitSet() {
 
   if (exDone(cell.i) || S.logIds.has(cell.i)) flushExercise(cell.i);
 
+  /* Un objectif atteint a son propre bandeau — après celui du
+     record s'il y en a un, pour que les deux se lisent. */
+  const hit = checkGoals();
+  if (hit.length) {
+    S.goalsHit.push(...hit.map((g) => g.id));
+    const g = hit[0];
+    setTimeout(() => {
+      showBanner("Objectif atteint", `${g.exercise} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}`);
+      buzz([12, 40, 12, 40, 24]);
+    }, isPR ? 2600 : 0);
+  }
+  saveLive();
+
   /* On ne quitte la carte qu'une fois le bloc entier bouclé — sinon
      un superset renverrait ailleurs entre A1 et A2. */
   if (blockDone(b)) {
@@ -680,11 +796,16 @@ const bannerS = new Spring(0, { response: 0.42, damping: 0.8, restDelta: 0.003, 
   b.style.opacity = String(Math.max(0, Math.min(1, v * 1.6)));
 } });
 
-function celebrate(name, weight, row) {
-  sEl("pr-detail").textContent = `${name} · ${fmt(weight)} lb`;
+function showBanner(title, detail) {
+  sEl("pr-banner").querySelector(".pr-text strong").textContent = title;
+  sEl("pr-detail").textContent = detail;
   bannerS.to(1, { damping: 0.78, response: 0.44 });
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => bannerS.to(0, { damping: 1, response: 0.4 }), 2300);
+}
+
+function celebrate(name, weight, row) {
+  showBanner("Record personnel", `${name} · ${fmt(weight)} lb`);
 
   if (!row || REDUCED.matches) return;
   const num = row.querySelector(".num");
@@ -740,6 +861,10 @@ function openSummary() {
   clearInterval(S.clockTimer);
   fillSummary();
   sEl("sc-sheet").hidden = false; sEl("sc-scrim").hidden = false; closingSheet = false;
+  /* La feuille garde son défilement d'une séance à l'autre : sans
+     ça, la seconde s'ouvrait sans son en-tête. Après l'avoir
+     affichée — un élément caché ignore scrollTop. */
+  sEl("sc-sheet").querySelector(".sheet-scroll").scrollTop = 0;
   sheetH = sEl("sc-sheet").offsetHeight || 1;
   scSheetY.hold(sheetH);
   scSheetY.to(0, { velocity: 0, damping: 0.82, response: 0.46 });
@@ -763,6 +888,20 @@ function fillSummary() {
   sEl("pr-list").innerHTML = S.beatenPRs.map((p) =>
     `<li><b>${esc(p.name)}</b><i>${p.prev ? `avant ${fmt(p.prev)}` : "premier record"}</i><span>${fmt(p.weight)} lb</span></li>`).join("");
 
+  /* Objectifs atteints pendant la séance, et jalons débloqués par
+     elle — chacun n'est fêté qu'une fois. */
+  const goals = (S.goalsHit || []).map((id) => DB.goals.find((g) => g.id === id)).filter(Boolean);
+  const badges = newBadges();
+  sEl("win-block").hidden = !goals.length && !badges.length;
+  sEl("win-list").innerHTML =
+    goals.map((g) => `<li><span class="win-ic">${GOAL_IC}</span><span class="win-t"><b>Objectif atteint</b>` +
+      `<i>${esc(g.exercise)} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}</i></span></li>`).join("") +
+    badges.map((b) => `<li><span class="win-ic badge-ic">${esc(b.big)}</span><span class="win-t"><b>${esc(b.title)}</b>` +
+      `<i>Jalon débloqué</i></span></li>`).join("");
+
+  /* Une séance libre réussie peut devenir un programme. */
+  sEl("save-as-prog").hidden = !(S.program.free && S.exercises.some((_, i) => S.state[i].done.length));
+
   const days = new Set(DB.sessions);
   const cal = sEl("cal"); cal.innerHTML = "";
   const t0 = new Date(); t0.setHours(0, 0, 0, 0);
@@ -775,6 +914,32 @@ function fillSummary() {
     cal.appendChild(c);
   }
   sEl("streak-num").textContent = String(streakWeeks());
+}
+
+const GOAL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>';
+
+/* Séance libre → programme. Seuls les exercices réellement faits
+   sont gardés, avec le nombre de séries faites. Les entrées de la
+   séance sont rattachées au nouveau programme : elles prennent sa
+   couleur dans l'historique. */
+function saveFreeAsProgram() {
+  const d = new Date();
+  const exercises = [];
+  S.exercises.forEach((e, i) => {
+    const st = S.state[i];
+    if (!st.done.length) return;
+    exercises.push(e.kind === "cardio"
+      ? { name: e.name, kind: "cardio", minutes: e.minutes || st.done[0].minutes || null, group: exercises.length }
+      : { name: e.name, sets: st.done.length, reps: e.reps || String(st.done[0].reps), group: exercises.length });
+  });
+  const p = { id: uid(), name: `Séance du ${d.getDate()} ${MOIS_L[d.getMonth()]}`, accent: nextAccent(), exercises };
+  DB.programs.push(p);
+  persist.programs();
+  S.logIds.forEach((id) => { const l = DB.logs.find((x) => x.id === id); if (l) { l.programId = p.id; l.programName = p.name; } });
+  persist.logs();
+  sEl("save-as-prog").hidden = true;
+  buzz(9);
+  toast(`« ${p.name} » ajouté à tes programmes`);
 }
 
 /* La note de séance s'écrit en refermant la feuille, quel que
@@ -810,9 +975,10 @@ function rebuildStack(focusEx, animate = false) {
     S.idx = b;
     sPos.hold(b);
   }
-  sEl("head-count").textContent = `${S.idx + 1} sur ${S.cards.length}`;
+  headCount();
   progressS.to(doneSets() / (totalSets() || 1));
   updateButton();
+  saveLive();
 }
 
 /* Après un changement qui ne touche qu'une carte (séries, passer). */
@@ -846,7 +1012,7 @@ const MENU_IC = {
 
 function sessionMenu(focus) {
   const blk = S.blocks[S.idx];
-  if (!blk) return;
+  if (!blk) { addToSession(); return; }
   const cell = activeCell(S.idx);
   const i = focus != null && blk.members.includes(focus) ? focus : (cell ? cell.i : blk.members[0]);
   const ex = S.exercises[i], st = S.state[i];
@@ -877,7 +1043,7 @@ function sessionMenu(focus) {
          <span>Historique de cet exercice<em class="pick-sub">${histCount(ex.name)}</em></span>
          ${MENU_IC.hist}</button>
        <button type="button" class="pick-row" id="sm-note">
-         <span>Note technique<em class="pick-sub">${note ? esc(note) : "Aucune — elle s'affiche sur la carte à chaque séance"}</em></span>
+         <span>Note et vidéo de technique<em class="pick-sub">${[note ? esc(note) : null, DB.links[ex.name] ? "vidéo liée" : null].filter(Boolean).join(" · ") || "Aucune — elles s'affichent sur la carte à chaque séance"}</em></span>
          ${MENU_IC.note}</button>
      </div>
      <p class="block-key">Séance</p>
@@ -913,19 +1079,17 @@ function sessionMenu(focus) {
 
   if ($("sm-swap")) $("sm-swap").addEventListener("click", () => {
     closeSheet();
+    /* On remplace par un exercice du MÊME type : le sélecteur ne
+       propose que du cardio pour un cardio, que de la musculation
+       sinon — et un nom neuf prend le type de celui qu'il remplace. */
     onSheetClose = () => pickExercise(ex.name, (name) => {
       if (name === ex.name) return;
-      /* Un nom déjà connu garde son type ; un nom neuf prend celui
-         de l'exercice qu'il remplace. */
-      const known = allExercises().includes(name);
-      const kind = isCardio(name) ? "cardio" : known ? null : ex.kind || null;
-      const next = { ...ex, name, kind };
-      if (kind !== "cardio") delete next.minutes;
+      const next = { ...ex, name };
       S.exercises[i] = next;
       S.state[i] = initState(next);
       rebuildStack(i);
       toast(`Remplacé par ${name}`);
-    });
+    }, { kind: ex.kind === "cardio" ? "cardio" : "force" });
   });
 
   $("sm-skip").addEventListener("click", () => {
@@ -945,40 +1109,64 @@ function sessionMenu(focus) {
 
   $("sm-add").addEventListener("click", () => {
     closeSheet();
-    onSheetClose = () => addExerciseSheet({
-      session: true,
-      onAdd: (nx, { keep }) => {
-        nx.group = freeGroup(S.exercises);
-        S.exercises.push(nx);
-        S.state.push(initState(nx));
-        if (keep) {
-          S.program.exercises.push({ ...nx, group: freeGroup(S.program.exercises) });
-          persist.programs();
-        }
-        rebuildStack(S.exercises.length - 1, true);
-        toast(keep ? "Ajouté — et gardé dans le programme" : "Ajouté pour aujourd'hui");
-      },
-    });
+    onSheetClose = addToSession;
   });
 }
 
-/* La note technique est permanente : elle suit l'exercice d'une
-   séance à l'autre. On l'écrit d'ici sans passer par les Réglages. */
+/* Ajouter un exercice à la séance en cours. En séance libre, il
+   n'y a pas de programme où le garder : la case disparaît. */
+function addToSession() {
+  addExerciseSheet({
+    session: true,
+    keepable: !S.program.free,
+    onAdd: (nx, { keep }) => {
+      nx.group = freeGroup(S.exercises);
+      S.exercises.push(nx);
+      S.state.push(initState(nx));
+      if (keep && !S.program.free) {
+        S.program.exercises.push({ ...nx, group: freeGroup(S.program.exercises) });
+        persist.programs();
+      }
+      rebuildStack(S.exercises.length - 1, true);
+      toast(keep ? "Ajouté — et gardé dans le programme" : S.program.free ? `${nx.name} ajouté` : "Ajouté pour aujourd'hui");
+    },
+  });
+}
+
+/* Un lien collé sans « https:// » (youtu.be/…) est complété ; ce
+   qui n'est pas une adresse web est refusé. */
+function cleanUrl(raw) {
+  const s = raw.trim();
+  if (!s) return "";
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    return /^https?:$/.test(u.protocol) && u.hostname.includes(".") ? u.href : null;
+  } catch (_) { return null; }
+}
+
+/* La note technique et la vidéo sont permanentes : elles suivent
+   l'exercice d'une séance à l'autre. On les écrit d'ici sans passer
+   par les Réglages. */
 function techNoteSheet(name, after) {
   openSheet(
-    `<p class="sheet-kicker">Note technique</p>
+    `<p class="sheet-kicker">Technique</p>
      <h2 class="sheet-h">${esc(name)}</h2>
-     <div class="field"><label for="tn-text">Elle s'affiche sur la carte à chaque séance</label>
+     <div class="field"><label for="tn-text">Note — elle s'affiche sur la carte à chaque séance</label>
        <textarea class="input" id="tn-text" rows="3" placeholder="Ex : grip large, coudes serrés">${esc(DB.notes[name] || "")}</textarea></div>
+     <div class="field"><label for="tn-url">Vidéo (YouTube, TikTok, Instagram…)</label>
+       <input class="input" id="tn-url" type="url" inputmode="url" autocomplete="off" placeholder="Colle un lien" value="${esc(DB.links[name] || "")}"></div>
      <button class="primary" id="tn-save"><span class="primary-label">Enregistrer</span></button>`
   );
   $("tn-save").addEventListener("click", () => {
     const t = $("tn-text").value.trim();
+    const url = cleanUrl($("tn-url").value);
+    if (url === null) { toast("Ce lien n'a pas l'air d'une adresse web"); return; }
     if (t) DB.notes[name] = t; else delete DB.notes[name];
-    persist.notes();
-    $("tn-text").blur();
+    if (url) DB.links[name] = url; else delete DB.links[name];
+    persist.notes(); persist.links();
+    document.activeElement && document.activeElement.blur();
     closeSheet();
-    onSheetClose = () => { if (after) after(); toast(t ? "Note enregistrée" : "Note retirée"); buzz(9); };
+    onSheetClose = () => { if (after) after(); toast("Technique enregistrée"); buzz(9); };
   });
 }
 
@@ -986,8 +1174,11 @@ function techNoteSheet(name, after) {
 function initSession() {
   initStackGestures();
   sEl("session-menu").addEventListener("click", () => sessionMenu());
+  sEl("save-as-prog").addEventListener("click", saveFreeAsProgram);
+  sEl("session-note").addEventListener("input", saveLive);
   sEl("commit").addEventListener("click", () => {
-    if (activeCell(S.idx)) commitSet();
+    if (!S.blocks.length) addToSession();
+    else if (activeCell(S.idx)) commitSet();
     else if (allDone()) openSummary();
     else goTo(nextIncomplete());
   });
