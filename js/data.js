@@ -21,6 +21,7 @@ const K = {
   links:     "wt2-links",
   live:      "wt2-live-session",
   badges:    "wt2-badges-seen",
+  gifts:     "wt2-gifts",
   hint:     "wt2-hint-seen",
   accentFix: "wt2-accents-v1",
   groupFix: "wt2-groups-v1",
@@ -536,6 +537,73 @@ function importOldApp() {
   persist.logs(); persist.programs(); persist.bodyweight();
   persist.notes(); persist.sessions(); persist.prs();
   return { logs: addedLogs, programs: addedProgs, bodyweight: addedBw, notes: addedNotes };
+}
+
+/* ── Programmes livrés avec une mise à jour ─────────────────
+   Les données vivent dans le stockage de l'icône : pour qu'un
+   programme préparé ailleurs arrive sur le téléphone, il voyage
+   dans le code. Chacun n'est ajouté qu'UNE fois par appareil
+   (`wt2-gifts`) : le supprimer ne le fait pas revenir. Les notes
+   et muscles ne remplacent jamais ceux déjà choisis. */
+const GIFTS = [
+  {
+    id: "gift-muscles-oublies",
+    name: "Muscles oubliés",
+    exercises: [
+      { name: "Face pull", sets: 3, reps: "12-15", group: 0 },
+      { name: "Mollets debout", sets: 3, reps: "10-12", group: 0 },
+      { name: "Rotation externe à la poulie", sets: 3, reps: "12-15", group: 1 },
+      { name: "Tibia raises", sets: 3, reps: "15-20", group: 1 },
+      { name: "Y-raise sur banc incliné", sets: 3, reps: "10-12", group: 2 },
+      { name: "Back extension 90°", sets: 3, reps: "10-12", group: 2 },
+      { name: "Abduction de hanche", sets: 3, reps: "12-15", group: 3 },
+      { name: "Adduction de hanche", sets: 3, reps: "12-15", group: 3 },
+      { name: "Curl poignet", sets: 2, reps: "15-20", group: 4 },
+      { name: "Reverse curl", sets: 2, reps: "12-15", group: 4 },
+      { name: "Farmer's carry", sets: 2, reps: "30-40", group: 4 },
+    ],
+    /* Le nom seul se devine mal : « incliné » serait un pec,
+       « extension » un triceps. */
+    muscles: {
+      "Rotation externe à la poulie": "Épaules",
+      "Tibia raises": "Jambes",
+      "Y-raise sur banc incliné": "Dos",
+      "Back extension 90°": "Dos",
+      "Abduction de hanche": "Jambes",
+      "Adduction de hanche": "Jambes",
+      "Curl poignet": "Autre",
+      "Farmer's carry": "Autre",
+    },
+    notes: {
+      "Face pull": "Corde à hauteur du visage, tire vers le front en écartant les mains. Coudes hauts.",
+      "Mollets debout": "Pause de 2 s en bas, étirement complet.",
+      "Rotation externe à la poulie": "Reps par bras. Coude collé au corps (serviette roulée sous le bras), charge légère.",
+      "Tibia raises": "Dos au mur, talons à ~30 cm du mur : lève la pointe des pieds le plus haut possible.",
+      "Y-raise sur banc incliné": "Couché ventre sur le banc, bras en Y, pouces vers le haut. Haltères très légers.",
+      "Back extension 90°": "Coussin sous les hanches. Remonte jusqu'à la ligne droite, sans cambrer. Disque contre la poitrine si trop facile.",
+      "Curl poignet": "Avant-bras sur les cuisses, paumes vers le haut, poignets dans le vide. Laisse rouler la barre au bout des doigts, puis referme et plie le poignet. Seul le poignet bouge.",
+      "Reverse curl": "Barre EZ, prise par-dessus (paumes vers le bas). Coudes fixes.",
+      "Farmer's carry": "Reps = mètres marchés. Haltères lourds, épaules basses, gainé.",
+    },
+  },
+];
+
+/* Ajoute les programmes livrés pas encore reçus. Renvoie leurs noms. */
+function addGifts() {
+  const got = load(K.gifts, []);
+  const fresh = GIFTS.filter((g) => !got.includes(g.id));
+  if (!fresh.length) return [];
+  fresh.forEach((g) => {
+    if (!DB.programs.some((p) => p.id === g.id)) {
+      DB.programs.push({ id: g.id, name: g.name, accent: nextAccent(), exercises: g.exercises.map((e) => ({ ...e })) });
+    }
+    Object.entries(g.muscles || {}).forEach(([n, m]) => { if (!DB.muscles[n]) DB.muscles[n] = m; });
+    Object.entries(g.notes || {}).forEach(([n, t]) => { if (!DB.notes[n]) DB.notes[n] = t; });
+    got.push(g.id);
+  });
+  persist.programs(); persist.muscles(); persist.notes();
+  save(K.gifts, got);
+  return fresh.map((g) => g.name);
 }
 
 /* ── Sauvegarde manuelle ──────────────────────────────────── */

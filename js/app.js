@@ -207,7 +207,8 @@ function initApp() {
   $("manage-ex-btn").addEventListener("click", manageExercisesSheet);
   $("wipe-btn").addEventListener("click", () => {
     confirmSheet("Tout effacer ?", "Programmes, historique, pesées et records seront supprimés de cet appareil. Ton ancienne app n'est pas touchée.", "Tout effacer", () => {
-      Object.values(K).forEach((k) => localStorage.removeItem(k));
+      /* `wt2-gifts` reste : sinon un programme livré reviendrait. */
+      Object.values(K).forEach((k) => { if (k !== K.gifts) localStorage.removeItem(k); });
       location.reload();
     });
   });
@@ -237,8 +238,10 @@ function initApp() {
 /* ── Démarrage ────────────────────────────────────────────── */
 normalizeAccents();
 normalizeGroups();
+const gifted = addGifts();
 initApp();
 refreshAll();
+if (gifted.length) toast(`Nouveau programme : ${gifted.join(", ")}`);
 switchTab(TABS.includes(sessionStorage.getItem(K.tab)) ? sessionStorage.getItem(K.tab) : "programmes", { instant: true });
 /* Au tout premier lancement de cette version, les jalons déjà
    acquis sont notés sans fête. */
