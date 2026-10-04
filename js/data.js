@@ -586,6 +586,34 @@ const GIFTS = [
       "Farmer's carry": "Reps = mètres marchés. Haltères lourds, épaules basses, gainé.",
     },
   },
+  {
+    id: "gift-bras",
+    name: "Bras",
+    exercises: [
+      { name: "Développé couché prise serrée", sets: 3, reps: "8-10", group: 0 },
+      { name: "Curl barre EZ", sets: 3, reps: "8-10", group: 0 },
+      { name: "Extension triceps au-dessus de la tête", sets: 3, reps: "10-12", group: 1 },
+      { name: "Curl incliné haltères", sets: 3, reps: "10-12", group: 1 },
+      { name: "Pushdown triceps (corde)", sets: 3, reps: "12-15", group: 2 },
+      { name: "Curl marteau", sets: 3, reps: "10-12", group: 2 },
+      { name: "Dips", sets: 2, reps: "8-12", group: 3 },
+      { name: "Curl à la poulie basse", sets: 2, reps: "12-15", group: 3 },
+    ],
+    /* « couché » serait deviné pectoraux. */
+    muscles: {
+      "Développé couché prise serrée": "Triceps",
+    },
+    notes: {
+      "Développé couché prise serrée": "Mains largeur d'épaules, coudes près du corps. La barre descend vers le bas des pecs.",
+      "Curl barre EZ": "Coudes collés aux côtes, sans balancer le dos. Descente en 2-3 s.",
+      "Extension triceps au-dessus de la tête": "Poulie, corde. Dos à la poulie, corde derrière la tête ; tends vers l'avant et le haut, coudes pointés devant.",
+      "Curl incliné haltères": "Banc à ~45°, bras qui pendent derrière le corps. Charge légère, gros étirement.",
+      "Pushdown triceps (corde)": "Coudes fixes contre le corps, écarte la corde en bas.",
+      "Curl marteau": "Pouces vers le haut, coudes fixes.",
+      "Dips": "Buste plutôt droit pour cibler les triceps. Machine assistée si 8 reps est trop dur.",
+      "Curl à la poulie basse": "Barre droite, coudes fixes, serre en haut.",
+    },
+  },
 ];
 
 /* Ajoute les programmes livrés pas encore reçus. Renvoie leurs noms. */
