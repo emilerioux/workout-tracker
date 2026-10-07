@@ -511,7 +511,10 @@ function setRow(i, j, tag, name, active) {
     const unset = !st.last && !st.draft.weight ? " unset" : "";
     vals = `<span class="num${unset}" data-k="weight">${fmt(st.draft.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num" data-k="reps">${st.draft.reps}</span>`;
   } else {
-    vals = `<span class="num">—</span><span class="unit">lb</span><span class="times">×</span><span class="num">—</span>`;
+    /* Série à venir : elle partira de la valeur en cours, alors on
+       la montre en pâle — suivie au doigt quand on tire un chiffre. */
+    const unset = !st.last && !st.draft.weight;
+    vals = `<span class="num" data-plan="weight">${unset ? "—" : fmt(st.draft.weight)}</span><span class="unit">lb</span><span class="times">×</span><span class="num" data-plan="reps">${st.draft.reps}</span>`;
   }
 
   li.innerHTML =
@@ -520,10 +523,10 @@ function setRow(i, j, tag, name, active) {
       ? `<span class="ss-cell"><span class="ss-ex">${esc(name)}</span><span class="set-vals">${vals}</span></span>`
       : `<span class="set-vals">${vals}</span>`) +
     `<span class="set-check">${CHECK}</span>` +
-    (active
-      ? `<p class="scrub-hint">${!st.last && !st.draft.weight
-           ? "Première fois sur cet exercice — règle le poids en le tirant vers le haut"
-           : "Tire un chiffre vers le haut ou le bas"}</p>`
+    (active && !st.last && !st.draft.weight
+      ? `<p class="scrub-hint">Première fois sur cet exercice — règle le poids en le tirant vers le haut</p>`
+      : active && !localStorage.getItem(K.scrub)
+      ? `<p class="scrub-hint">Tire un chiffre vers le haut ou le bas</p>`
       : "");
 
   if (active) li.querySelectorAll(".num[data-k]").forEach((el) => bindScrub(el, el.dataset.k, i));
@@ -565,6 +568,9 @@ function bindScrub(el, kind, i) {
       S.state[i].draft[kind] = v;
       el.textContent = kind === "weight" ? fmt(v) : String(v);
       el.classList.remove("unset");
+      document.querySelectorAll(`#stack .set:not(.done):not(.active)[data-ex="${i}"] .num[data-plan="${kind}"]`)
+        .forEach((n) => { n.textContent = el.textContent; });
+      if (!g.learned) { g.learned = true; localStorage.setItem(K.scrub, "1"); }
       buzz(4);
       pop(el, 1.06, 0.7);
     }
@@ -870,12 +876,24 @@ function openSummary() {
   scSheetY.to(0, { velocity: 0, damping: 0.82, response: 0.46 });
   buzz([10, 40, 10, 40, 18]);
 }
-function closeSummary(velocity = 0) {
+/* Seul « Terminer la séance » termine. Refermer la feuille autrement
+   (toucher en haut, la glisser vers le bas, « Continuer ») ramène à
+   la séance : le X n'est plus un point de non-retour. */
+function closeSummary(velocity = 0, finish = false) {
   if (closingSheet) return;
-  saveSessionNote();
   closingSheet = true;
   scSheetY.to(sheetH, { velocity, damping: 1, response: 0.34 });
-  setTimeout(closeSession, 180);
+  if (finish) {
+    saveSessionNote();
+    setTimeout(closeSession, 180);
+    return;
+  }
+  clearInterval(S.clockTimer);
+  S.clockTimer = setInterval(() => {
+    sEl("clock").textContent = mmss(Date.now() - S.startedAt);
+  }, 1000);
+  saveLive();
+  buzz(8);
 }
 
 function fillSummary() {
@@ -1005,7 +1023,6 @@ const MENU_IC = {
   swap: '<svg viewBox="0 0 24 24" class="tick"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>',
   skip: '<svg viewBox="0 0 24 24" class="tick"><path d="M6 5v14l9-7zM18 5v14"/></svg>',
   resume: '<svg viewBox="0 0 24 24" class="tick"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>',
-  note: '<svg viewBox="0 0 24 24" class="tick"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></svg>',
   hist: '<svg viewBox="0 0 24 24" class="tick"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></svg>',
   add: '<svg viewBox="0 0 24 24" class="tick"><path d="M12 5v14M5 12h14"/></svg>',
 };
@@ -1017,22 +1034,14 @@ function sessionMenu(focus) {
   const i = focus != null && blk.members.includes(focus) ? focus : (cell ? cell.i : blk.members[0]);
   const ex = S.exercises[i], st = S.state[i];
   const cardio = ex.kind === "cardio";
-  const note = DB.notes[ex.name];
+  const doneTxt = `${st.done.length} faite${st.done.length > 1 ? "s" : ""}`;
 
   openSheet(
     `<p class="sheet-kicker">Cette séance seulement</p>
      <h2 class="sheet-h">${esc(ex.name)}</h2>
      ${blk.superset ? `<div class="segmented small who" id="sm-who">${blk.members.map((m, k) =>
         `<button type="button" data-i="${m}" class="${m === i ? "on" : ""}">${blk.letter}${k + 1} · ${esc(S.exercises[m].name)}</button>`).join("")}</div>` : ""}
-     ${!cardio && !st.skipped ? `
-       <div class="stepper-row">
-         <span><b>Séries</b><em>${st.done.length} faite${st.done.length > 1 ? "s" : ""}</em></span>
-         <div class="stepper">
-           <button type="button" id="sm-minus" aria-label="Retirer une série">−</button>
-           <b class="tnum" id="sm-count" aria-live="polite">${st.target}</b>
-           <button type="button" id="sm-plus" aria-label="Ajouter une série">+</button>
-         </div>
-       </div>` : ""}
+     ${!cardio && !st.skipped ? stepperRow("sm-count", st.target, { label: "Séries", sub: doneTxt }) : ""}
      <div class="menu-list">
        ${st.done.length ? "" : `<button type="button" class="pick-row" id="sm-swap"><span>Remplacer par un autre exercice</span>${MENU_IC.swap}</button>`}
        <button type="button" class="pick-row${st.skipped ? "" : " warn"}" id="sm-skip">
@@ -1042,75 +1051,66 @@ function sessionMenu(focus) {
        <button type="button" class="pick-row" id="sm-hist">
          <span>Historique de cet exercice<em class="pick-sub">${histCount(ex.name)}</em></span>
          ${MENU_IC.hist}</button>
-       <button type="button" class="pick-row" id="sm-note">
-         <span>Note et vidéo de technique<em class="pick-sub">${[note ? esc(note) : null, DB.links[ex.name] ? "vidéo liée" : null].filter(Boolean).join(" · ") || "Aucune — elles s'affichent sur la carte à chaque séance"}</em></span>
-         ${MENU_IC.note}</button>
      </div>
+     ${globalHTML(ex.name)}
      <p class="block-key">Séance</p>
      <div class="menu-list">
        <button type="button" class="pick-row" id="sm-add"><span>Ajouter un exercice</span>${MENU_IC.add}</button>
-     </div>`
+     </div>
+     ${ficheFoot()}`
   );
+
+  /* Les séries ne descendent jamais sous ce qui est déjà fait. */
+  const count = !cardio && !st.skipped
+    ? bindStepper("sm-count", { min: Math.max(1, st.done.length), max: 20 })
+    : null;
+  const glob = bindGlobal(ex.name);
+
+  /* Ce qui a été changé s'écrit avant toute action : passer ou
+     remplacer ne jette pas le nombre de séries ni la note. Renvoie
+     faux si quelque chose cloche (un lien invalide). */
+  const commit = () => {
+    const err = glob.check();
+    if (err) { toast(err); return false; }
+    const n = count ? count() : null;
+    const noteBefore = DB.notes[ex.name] || "", linkBefore = DB.links[ex.name] || "";
+    glob.apply();
+    const techChanged = (DB.notes[ex.name] || "") !== noteBefore || (DB.links[ex.name] || "") !== linkBefore;
+    if (n && n !== st.target) { st.target = n; refreshBlockOf(i); saveLive(); }
+    if (techChanged) rebuildStack(i);
+    return true;
+  };
+  const then = (fn) => () => {
+    if (!commit()) return;
+    closeSheet();
+    onSheetClose = fn;
+  };
 
   if (blk.superset) {
     $("sm-who").addEventListener("click", (e) => {
       const bt = e.target.closest("[data-i]");
       if (!bt || Number(bt.dataset.i) === i) return;
       buzz(6);
-      closeSheet();
-      onSheetClose = () => sessionMenu(Number(bt.dataset.i));
+      then(() => sessionMenu(Number(bt.dataset.i)))();
     });
   }
 
-  if (!cardio && !st.skipped) {
-    const set = (n) => {
-      const lo = Math.max(1, st.done.length);
-      const v = Math.max(lo, Math.min(20, n));
-      if (v === st.target) { buzz(3); pop($("sm-count"), 1.04, 0.5); return; }
-      st.target = v;
-      $("sm-count").textContent = String(v);
-      pop($("sm-count"), 1.14, 0.6);
-      buzz(7);
-      refreshBlockOf(i);
-    };
-    $("sm-minus").addEventListener("click", () => set(st.target - 1));
-    $("sm-plus").addEventListener("click", () => set(st.target + 1));
-  }
+  /* On remplace par un exercice du MÊME type : le sélecteur ne
+     propose que du cardio pour un cardio, que de la musculation
+     sinon — et un nom neuf prend le type de celui qu'il remplace. */
+  if ($("sm-swap")) $("sm-swap").addEventListener("click", then(() => pickExercise(ex.name, (name) => {
+    if (name === ex.name) return;
+    const next = { ...ex, name };
+    S.exercises[i] = next;
+    S.state[i] = initState(next);
+    rebuildStack(i);
+    toast(`Remplacé par ${name}`);
+  }, { kind: ex.kind === "cardio" ? "cardio" : "force" })));
 
-  if ($("sm-swap")) $("sm-swap").addEventListener("click", () => {
-    closeSheet();
-    /* On remplace par un exercice du MÊME type : le sélecteur ne
-       propose que du cardio pour un cardio, que de la musculation
-       sinon — et un nom neuf prend le type de celui qu'il remplace. */
-    onSheetClose = () => pickExercise(ex.name, (name) => {
-      if (name === ex.name) return;
-      const next = { ...ex, name };
-      S.exercises[i] = next;
-      S.state[i] = initState(next);
-      rebuildStack(i);
-      toast(`Remplacé par ${name}`);
-    }, { kind: ex.kind === "cardio" ? "cardio" : "force" });
-  });
-
-  $("sm-skip").addEventListener("click", () => {
-    closeSheet();
-    onSheetClose = () => toggleSkip(i);
-  });
-
-  $("sm-hist").addEventListener("click", () => {
-    closeSheet();
-    onSheetClose = () => exerciseHistorySheet(ex.name);
-  });
-
-  $("sm-note").addEventListener("click", () => {
-    closeSheet();
-    onSheetClose = () => techNoteSheet(ex.name, () => rebuildStack(i));
-  });
-
-  $("sm-add").addEventListener("click", () => {
-    closeSheet();
-    onSheetClose = addToSession;
-  });
+  $("sm-skip").addEventListener("click", then(() => toggleSkip(i)));
+  $("sm-hist").addEventListener("click", then(() => exerciseHistorySheet(ex.name)));
+  $("sm-add").addEventListener("click", then(addToSession));
+  $("fx-save").addEventListener("click", then(() => buzz(9)));
 }
 
 /* Ajouter un exercice à la séance en cours. En séance libre, il
@@ -1144,32 +1144,6 @@ function cleanUrl(raw) {
   } catch (_) { return null; }
 }
 
-/* La note technique et la vidéo sont permanentes : elles suivent
-   l'exercice d'une séance à l'autre. On les écrit d'ici sans passer
-   par les Réglages. */
-function techNoteSheet(name, after) {
-  openSheet(
-    `<p class="sheet-kicker">Technique</p>
-     <h2 class="sheet-h">${esc(name)}</h2>
-     <div class="field"><label for="tn-text">Note — elle s'affiche sur la carte à chaque séance</label>
-       <textarea class="input" id="tn-text" rows="3" placeholder="Ex : grip large, coudes serrés">${esc(DB.notes[name] || "")}</textarea></div>
-     <div class="field"><label for="tn-url">Vidéo (YouTube, TikTok, Instagram…)</label>
-       <input class="input" id="tn-url" type="url" inputmode="url" autocomplete="off" placeholder="Colle un lien" value="${esc(DB.links[name] || "")}"></div>
-     <button class="primary" id="tn-save"><span class="primary-label">Enregistrer</span></button>`
-  );
-  $("tn-save").addEventListener("click", () => {
-    const t = $("tn-text").value.trim();
-    const url = cleanUrl($("tn-url").value);
-    if (url === null) { toast("Ce lien n'a pas l'air d'une adresse web"); return; }
-    if (t) DB.notes[name] = t; else delete DB.notes[name];
-    if (url) DB.links[name] = url; else delete DB.links[name];
-    persist.notes(); persist.links();
-    document.activeElement && document.activeElement.blur();
-    closeSheet();
-    onSheetClose = () => { if (after) after(); toast("Technique enregistrée"); buzz(9); };
-  });
-}
-
 /* ── Câblage ──────────────────────────────────────────────── */
 function initSession() {
   initStackGestures();
@@ -1182,11 +1156,15 @@ function initSession() {
     else if (allDone()) openSummary();
     else goTo(nextIncomplete());
   });
+  /* Rien de validé : il n'y a pas de bilan à montrer, mais on
+     demande quand même — un X touché par erreur ne jette pas la
+     séance. */
   sEl("quit").addEventListener("click", () => {
     if (doneSets() > 0) openSummary();
-    else closeSession();
+    else confirmSheet("Quitter la séance ?", "Aucune série n'a été validée — rien ne sera écrit.", "Quitter", closeSession);
   });
-  sEl("sheet-close").addEventListener("click", () => closeSummary());
+  sEl("sheet-close").addEventListener("click", () => closeSummary(0, true));
+  sEl("sheet-resume").addEventListener("click", () => closeSummary());
   sEl("sc-scrim").addEventListener("click", () => closeSummary());
 
   /* Glissé vers le bas pour refermer la feuille. */

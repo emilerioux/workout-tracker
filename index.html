@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -273,7 +273,7 @@
     <section class="sheet" id="sc-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
       <div class="grabber" aria-hidden="true"></div>
       <div class="sheet-scroll">
-        <p class="sheet-kicker">Séance terminée</p>
+        <p class="sheet-kicker">Bilan de la séance</p>
         <h2 class="sheet-title" id="sheet-title">Séance</h2>
         <div class="stat-row">
           <div class="stat"><span class="stat-val tnum" id="stat-time">0:00</span><span class="stat-key">Durée</span></div>
@@ -299,7 +299,8 @@
           <p class="cal-legend"><span class="cal-swatch"></span> jours d'entraînement · 5 dernières semaines</p>
         </div>
         <button class="ghost-btn save-as" id="save-as-prog" hidden>Enregistrer cette séance comme programme</button>
-        <button class="primary sheet-cta" id="sheet-close"><span class="primary-label">Terminé</span></button>
+        <button class="primary sheet-cta" id="sheet-close"><span class="primary-label">Terminer la séance</span></button>
+        <button type="button" class="fx-danger sheet-resume" id="sheet-resume">Continuer la séance</button>
       </div>
     </section>
   </div>
@@ -322,13 +323,14 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=27"></script>
-<script src="js/motion.js?v=27"></script>
-<script src="js/data.js?v=27"></script>
-<script src="js/chart.js?v=27"></script>
-<script src="js/session.js?v=27"></script>
-<script src="js/views.js?v=27"></script>
-<script src="js/app.js?v=27"></script>
+<script src="js/theme.js?v=28"></script>
+<script src="js/motion.js?v=28"></script>
+<script src="js/data.js?v=28"></script>
+<script src="js/chart.js?v=28"></script>
+<script src="js/fiche.js?v=28"></script>
+<script src="js/session.js?v=28"></script>
+<script src="js/views.js?v=28"></script>
+<script src="js/app.js?v=28"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

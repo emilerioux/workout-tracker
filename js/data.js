@@ -23,6 +23,7 @@ const K = {
   badges:    "wt2-badges-seen",
   gifts:     "wt2-gifts",
   hint:     "wt2-hint-seen",
+  scrub:    "wt2-scrub-learned",
   accentFix: "wt2-accents-v1",
   groupFix: "wt2-groups-v1",
   tab:       "wt2-tab",

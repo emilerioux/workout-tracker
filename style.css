@@ -421,6 +421,23 @@ body.in-session .tabbar { opacity: 0; pointer-events: none; }
 }
 .prog-hero h1 { margin: 0; font-size: 1.875rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.06; color: #06140A; }
 .prog-hero p { margin: 6px 0 0; font-size: .875rem; color: rgba(0,0,0,.58); font-weight: 550; }
+/* Sur un dégradé foncé (bleu, violet, indigo, gris…) le texte passe
+   en blanc — c'est heroInk() qui choisit, au contraste. */
+.prog-hero.ink-light h1 { color: #fff; }
+.prog-hero.ink-light p { color: rgba(255,255,255,.82); }
+
+/* Le bouton principal d'une vue poussée reste sous le pouce : sur un
+   programme de 11 exercices, il fallait descendre tout en bas. */
+.pushed-foot {
+  flex: none;
+  padding: 12px 20px calc(var(--safe-b) + 16px);
+  background: var(--bar);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  border-top: 1px solid var(--hair);
+}
+.pushed-foot .primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: transparent; }
+.pushed-foot .primary .primary-label { color: var(--accent-ink); }
 
 .ex-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ex-row, .draft-row {
@@ -856,7 +873,9 @@ textarea.input { resize: vertical; line-height: 1.45; }
           mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 14px), transparent 100%);
 }
 .card::-webkit-scrollbar { width: 0; }
-.card-inner { margin: auto 0; width: 100%; }
+/* Calée en haut : centrée, elle laissait ~200 px de vide au-dessus
+   du nom sur un exercice court, et sautait d'un exo à l'autre. */
+.card-inner { margin: 6px 0 auto; width: 100%; }
 
 .badge {
   display: inline-block;
@@ -1064,7 +1083,7 @@ textarea.input { resize: vertical; line-height: 1.45; }
    Accessibilité — trois signaux indépendants
    ════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-transparency: reduce) {
-  .chrome-top, .chrome-bottom, .page-bar, .pushed-bar, .tabbar { background: var(--bar-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .chrome-top, .chrome-bottom, .page-bar, .pushed-bar, .pushed-foot, .tabbar { background: var(--bar-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
   .sheet, .hint, .pr-banner, .toast, .chart-tip { backdrop-filter: none; -webkit-backdrop-filter: none; }
   .sheet  { background: var(--sheet-solid); }
   .hint   { background: var(--hint-solid); }
@@ -1443,3 +1462,71 @@ label.block-key { display: block; }
 /* Séance libre : « Ajouter un exercice » sous chaque carte. */
 .add-more { list-style: none; }
 .add-more .tile-btn { margin-top: 6px; }
+
+/* ══ Fiche d'exercice (js/fiche.js) ══════════════════════
+   La même feuille partout : programme, séance, historique,
+   Mes exercices. */
+
+/* Le chiffre du − / + est un champ : le toucher ouvre le clavier. */
+.step-val {
+  display: flex; align-items: baseline; justify-content: center; gap: 3px;
+  min-width: 52px; padding: 0 2px; border-radius: 10px; cursor: text;
+  will-change: transform;
+}
+.step-val input {
+  width: 3.4ch; min-width: 0; padding: 6px 0; border: 0; outline: 0; background: none;
+  color: var(--tx); font: inherit; font-size: 1.25rem; font-weight: 650; letter-spacing: -.02em;
+  text-align: center; font-variant-numeric: tabular-nums;
+}
+.step-val input::placeholder { color: var(--tx-3); font-weight: 500; }
+.step-val em { font-style: normal; font-size: .6875rem; color: var(--tx-3); }
+.step-val:focus-within { background: var(--glass-2); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+.stepper-row + .stepper-row { margin-top: -6px; }
+
+/* Le nom en titre ; quand on peut le changer, il porte un chevron. */
+.fx-title {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin: 6px 0 16px; padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--tx); font: inherit; font-size: 1.5rem; font-weight: 700; letter-spacing: -.028em; text-align: left;
+}
+.fx-title span { min-width: 0; }
+.fx-title svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--tx-3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; margin-top: 3px; }
+.fx-title.empty { color: var(--tx-3); }
+.fx-title:active { opacity: .7; }
+.segmented.fx-kind { margin: 10px 0 4px; }
+
+/* « L'exercice — partout » : des rangées qui se déplient. */
+.disclose .tick { color: var(--tx-3); transition: transform 180ms ease-out; }
+.disclose.open .tick { transform: rotate(90deg); }
+.fx-panel { padding: 6px 2px 8px; }
+.fx-panel .chips { margin-bottom: 4px; }
+.fx-panel .input + .input { margin-top: 8px; }
+.fx-panel .fineprint { margin-top: 8px; }
+.fx-global { margin-bottom: 0; }
+.fx-name { margin-bottom: 6px; }
+
+/* Action destructive : là, mais sans crier. */
+.fx-danger {
+  display: block; width: 100%; margin-top: 6px; padding: 14px;
+  border: 0; background: none; cursor: pointer;
+  color: var(--red-tx); font: inherit; font-size: .875rem; font-weight: 500;
+}
+.fx-danger:active { opacity: .6; }
+
+/* Une série : poids − / + × reps − / + et le retrait. */
+.fx-set { display: grid; grid-template-columns: 16px auto 10px auto 1fr; align-items: center; gap: 4px; }
+.fx-set .stepper { gap: 2px; }
+.fx-set .stepper button { width: 32px; height: 36px; font-size: 1.0625rem; border-radius: 10px; }
+.fx-set .step-val { min-width: 0; }
+.fx-set .step-val input { font-size: 1.0625rem; }
+.fx-set .times { margin: 0; text-align: center; }
+.fx-set .edit-del { justify-self: end; width: 34px; height: 34px; }
+.fx-set [data-step^="fx-w"] input { width: 5ch; }
+.fx-set [data-step^="fx-r"] input { width: 2.6ch; }
+.stepper-row .step-val { min-width: 78px; }
+.sheet-resume { color: var(--tx-2); margin-top: 4px; }
+/* Fourchette de reps : pas de largeur fixe (c'est fit() qui la
+   donne), et le chiffre ne se fait jamais rogner. */
+.step-val input.range { width: auto; text-overflow: clip; }
+.stepper-row:has(input.range) .step-val { min-width: 0; padding: 0 6px; }
+.stepper-row > span { min-width: 0; } .stepper-row em { white-space: nowrap; }
