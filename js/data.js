@@ -615,6 +615,34 @@ const GIFTS = [
       "Curl à la poulie basse": "Barre droite, coudes fixes, serre en haut.",
     },
   },
+  {
+    id: "gift-dos-pecs",
+    name: "Dos & Pecs",
+    exercises: [
+      { name: "Dumbbell bench press", sets: 4, reps: "6-8", group: 0 },
+      { name: "Chest-supported dumbbell row", sets: 4, reps: "6-8", group: 0 },
+      { name: "Incline dumbbell press", sets: 3, reps: "8-10", group: 1 },
+      { name: "Pull-ups", sets: 3, reps: "6-10", group: 1 },
+      { name: "Cable fly", sets: 3, reps: "12-15", group: 2 },
+      { name: "Single-arm lat pulldown", sets: 3, reps: "10-12", group: 2 },
+      { name: "Push-ups", sets: 2, reps: "10-15", group: 3 },
+      { name: "Cable pullover", sets: 2, reps: "12-15", group: 3 },
+    ],
+    /* « chest » serait deviné pectoraux. */
+    muscles: {
+      "Chest-supported dumbbell row": "Dos",
+    },
+    notes: {
+      "Dumbbell bench press": "Banc plat, omoplates serrées et basses, pieds au sol. Descends les haltères à hauteur de poitrine, coudes à ~45°.",
+      "Chest-supported dumbbell row": "Couché ventre sur le banc incliné à ~30-45°, bras qui pendent. Tire les coudes vers les hanches, serre les omoplates en haut.",
+      "Incline dumbbell press": "Banc à ~30°. Descends jusqu'à sentir l'étirement des pecs, pousse en rapprochant les haltères.",
+      "Pull-ups": "Prise un peu plus large que les épaules. Machine assistée ou tirage vertical si 6 reps est trop dur.",
+      "Cable fly": "Poulies à hauteur d'épaules, un pas en avant, coudes légèrement fléchis. Ramène les mains devant le milieu de la poitrine, comme pour un câlin.",
+      "Single-arm lat pulldown": "Reps par bras. À genoux de côté sous la poulie haute, poignée simple. Laisse le bras monter pour étirer le dorsal, puis tire le coude vers la hanche.",
+      "Push-ups": "Corps gainé en planche. Poitrine jusqu'à quelques cm du sol.",
+      "Cable pullover": "Debout face à la poulie haute, barre droite ou corde. Bras presque tendus, descends les mains en arc jusqu'aux cuisses en contractant les dorsaux.",
+    },
+  },
 ];
 
 /* Ajoute les programmes livrés pas encore reçus. Renvoie leurs noms. */
