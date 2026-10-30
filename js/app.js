@@ -140,7 +140,7 @@ function initApp() {
     $("bw-input").blur();
     buzz(9);
     renderBodyweight();
-    toast("Pesée enregistrée");
+    if (!celebrateOutside()) toast("Pesée enregistrée");
   });
 
   $("add-photo-btn").addEventListener("click", () => $("photo-input").click());

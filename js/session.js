@@ -297,8 +297,28 @@ function soloHead(i) {
   const note = DB.notes[ex.name];
   return `<h2 class="ex-name">${esc(ex.name)}</h2>` +
     `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
+    `<div class="ex-goals" data-goal-ex="${i}"></div>` +
     (note ? `<p class="ex-note">${esc(note)}</p>` : "") +
     techLink(ex.name);
+}
+
+/* Les objectifs de l'exercice, sur sa carte : ce qui reste suit les
+   séries validées. Un objectif atteint pendant cette séance reste
+   affiché jusqu'à la fin, il ne disparaît pas sous le doigt. */
+function paintGoalLines(b) {
+  S.cards[b].el.querySelectorAll("[data-goal-ex]").forEach((host) => {
+    const i = Number(host.dataset.goalEx), name = S.exercises[i].name;
+    const withName = S.blocks[b].superset;
+    host.innerHTML = DB.goals
+      .filter((g) => g.exercise === name && (!g.doneAt || (S.goalsHit || []).includes(g.id)))
+      .map((g) => {
+        const cur = liveLevel(g, S.state[i].done);
+        const who = withName ? `${esc(name)} · ` : "";
+        return g.doneAt || goalReached(g, cur)
+          ? `<p class="ex-goal done">${GOAL_IC}<span>${who}Objectif <b>${goalLabel(g)}</b> — atteint</span></p>`
+          : `<p class="ex-goal">${GOAL_IC}<span>${who}Objectif <b>${goalLabel(g)}</b> · encore ${goalAmount(g.metric, g.target - cur)}</span></p>`;
+      }).join("");
+  });
 }
 
 /* Le lien vers la vidéo de technique : il s'ouvre à côté (YouTube,
@@ -326,6 +346,7 @@ function ssHead(blk) {
     `<h2 class="ex-name ss-title">${names}</h2>` +
     `<p class="ex-target"><b>${ssRounds(blk)}</b> tours<span class="dot-sep"></span>` +
     `<span>${blk.members.length} exercices enchaînés</span></p>` +
+    blk.members.map((i) => `<div class="ex-goals" data-goal-ex="${i}"></div>`).join("") +
     notes +
     blk.members.map((i) => techLink(S.exercises[i].name, true)).join("");
 }
@@ -346,6 +367,7 @@ function activeCell(b) {
 
 function renderCard(b) {
   const blk = S.blocks[b], ol = S.cards[b].sets;
+  paintGoalLines(b);
   ol.innerHTML = "";
   blk.members.forEach((i) => { const n = nudgeRow(i, blk); if (n) ol.appendChild(n); });
   S.cards[b].el.classList.toggle("is-skipped", blk.members.every((i) => S.state[i].skipped));
@@ -748,12 +770,13 @@ function commitSet() {
 
   /* Un objectif atteint a son propre bandeau — après celui du
      record s'il y en a un, pour que les deux se lisent. */
-  const hit = checkGoals();
+  const hit = checkGoals({ exercise: ex.name, sets: st.done });
   if (hit.length) {
     S.goalsHit.push(...hit.map((g) => g.id));
+    paintGoalLines(b);
     const g = hit[0];
     setTimeout(() => {
-      showBanner("Objectif atteint", `${g.exercise} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}`);
+      showBanner("Objectif atteint", `${g.exercise} · ${goalLabel(g)}`);
       buzz([12, 40, 12, 40, 24]);
     }, isPR ? 2600 : 0);
   }
@@ -913,7 +936,7 @@ function fillSummary() {
   sEl("win-block").hidden = !goals.length && !badges.length;
   sEl("win-list").innerHTML =
     goals.map((g) => `<li><span class="win-ic">${GOAL_IC}</span><span class="win-t"><b>Objectif atteint</b>` +
-      `<i>${esc(g.exercise)} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}</i></span></li>`).join("") +
+      `<i>${esc(g.exercise)} · ${goalLabel(g)}</i></span></li>`).join("") +
     badges.map((b) => `<li><span class="win-ic badge-ic">${esc(b.big)}</span><span class="win-t"><b>${esc(b.title)}</b>` +
       `<i>Jalon débloqué</i></span></li>`).join("");
 

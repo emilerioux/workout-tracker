@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=30">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -41,6 +41,7 @@
           </button>
         </div>
         <div id="goals-card"></div>
+        <div id="month-card"></div>
         <div id="badges-card"></div>
       </div>
     </section>
@@ -107,11 +108,13 @@
           <div class="segmented small" id="metric-toggle">
             <button type="button" data-metric="weight" class="on">Poids</button>
             <button type="button" data-metric="reps">Reps</button>
+            <button type="button" data-metric="e1rm">1RM estimé</button>
           </div>
           <div id="ex-stats" class="stat-row"></div>
           <div class="card-surface">
             <div id="ex-chart" class="chart-host"></div>
           </div>
+          <p class="fineprint" id="ex-e1rm-note" hidden>Ta meilleure série de chaque séance, ramenée à une seule rep (formule d'Epley). Une estimation, moins fiable au-delà de 12 reps.</p>
           <div class="chart-links">
             <button class="link-btn" id="ex-table-btn" aria-expanded="false">Voir les valeurs</button>
             <button class="link-btn" id="ex-hist-btn">Toutes les séances</button>
@@ -323,14 +326,14 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=29"></script>
-<script src="js/motion.js?v=29"></script>
-<script src="js/data.js?v=29"></script>
-<script src="js/chart.js?v=29"></script>
-<script src="js/fiche.js?v=29"></script>
-<script src="js/session.js?v=29"></script>
-<script src="js/views.js?v=29"></script>
-<script src="js/app.js?v=29"></script>
+<script src="js/theme.js?v=30"></script>
+<script src="js/motion.js?v=30"></script>
+<script src="js/data.js?v=30"></script>
+<script src="js/chart.js?v=30"></script>
+<script src="js/fiche.js?v=30"></script>
+<script src="js/session.js?v=30"></script>
+<script src="js/views.js?v=30"></script>
+<script src="js/app.js?v=30"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

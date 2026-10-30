@@ -321,26 +321,27 @@ function pickExercise(current, onPick, { create = true, kind = null } = {}) {
    Lundi → aujourd'hui, comparé à la semaine d'avant ENTIÈRE. Le
    delta dit « où j'en suis par rapport à la dernière fois », pas
    un jugement : il reste en encre neutre, jamais en rouge. */
+const statDelta = (x, y, f = (v) => Math.round(v).toLocaleString("fr-CA")) => {
+  const d = x - y;
+  if (!y && !x) return "";
+  if (!d) return "=";
+  return `${d > 0 ? "+" : "−"}${f(Math.abs(d))}`;
+};
+const statTile = (val, key, d) =>
+  `<div class="stat"><span class="stat-val tnum">${val}</span><span class="stat-key">${key}</span>${d ? `<span class="stat-delta tnum">${d}</span>` : ""}</div>`;
+const volumeText = (v) => (v >= 10000 ? `${fmt(v / 1000)}k` : Math.round(v).toLocaleString("fr-CA"));
+
 function renderWeek() {
   const host = $("week-card");
   if (!DB.logs.length) { host.innerHTML = ""; return; }
   const a = weekStats(0), b = weekStats(-1);
-  const delta = (x, y, f = (v) => Math.round(v).toLocaleString("fr-CA")) => {
-    const d = x - y;
-    if (!y && !x) return "";
-    if (!d) return "=";
-    return `${d > 0 ? "+" : "−"}${f(Math.abs(d))}`;
-  };
-  const tile = (val, key, d) =>
-    `<div class="stat"><span class="stat-val tnum">${val}</span><span class="stat-key">${key}</span>${d ? `<span class="stat-delta tnum">${d}</span>` : ""}</div>`;
   host.innerHTML =
     `<section class="card-surface week-card" aria-label="Bilan de la semaine">
        <header class="week-head"><h3>Cette semaine</h3><span class="week-range">${esc(weekRange())}</span></header>
        <div class="stat-row">
-         ${tile(a.sessions, `Séance${a.sessions > 1 ? "s" : ""}`, delta(a.sessions, b.sessions))}
-         ${tile(a.volume >= 10000 ? `${fmt(a.volume / 1000)}k` : Math.round(a.volume).toLocaleString("fr-CA"), "Volume (lb)",
-           delta(a.volume, b.volume, (v) => (v >= 10000 ? `${fmt(v / 1000)}k` : Math.round(v).toLocaleString("fr-CA"))))}
-         ${tile(fmt(a.cardio), "Cardio (min)", delta(a.cardio, b.cardio))}
+         ${statTile(a.sessions, `Séance${a.sessions > 1 ? "s" : ""}`, statDelta(a.sessions, b.sessions))}
+         ${statTile(volumeText(a.volume), "Volume (lb)", statDelta(a.volume, b.volume, volumeText))}
+         ${statTile(fmt(a.cardio), "Cardio (min)", statDelta(a.cardio, b.cardio))}
        </div>
        <p class="week-foot">Petit chiffre : écart avec la semaine passée.</p>
      </section>`;
@@ -392,20 +393,22 @@ function renderGoals() {
   const done = DB.goals.filter((g) => g.doneAt).sort((a, b) => b.doneAt - a.doneAt).slice(0, 3);
   const row = (g) => {
     const { cur, p } = goalProgress(g), u = GOAL_UNIT[g.metric];
+    const at = goalWeightText(g);
     let sub;
     if (g.doneAt) {
       const d = new Date(g.doneAt);
-      sub = `Atteint le ${d.getDate()} ${MOIS_L[d.getMonth()]}`;
+      sub = [at, `Atteint le ${d.getDate()} ${MOIS_L[d.getMonth()]}`].filter(Boolean).join(" · ");
     } else {
-      const left = g.target - cur;
+      const left = Math.abs(g.target - cur);
+      const dir = g.metric === "bodyweight" ? (goalDown(g) ? " à perdre" : " à prendre") : "";
       const dl = g.deadline ? daysLeft(g.deadline) : null;
-      sub = [`reste ${fmt(left)} ${u}`,
+      sub = [at, `reste ${goalAmount(g.metric, left)}${dir}`,
         dl == null ? null : dl > 1 ? `${dl} jours` : dl === 1 ? "dernier jour" : "échéance passée"].filter(Boolean).join(" · ");
     }
     return `<button type="button" class="goal${g.doneAt ? " done" : ""}" data-goal="${esc(g.id)}"
-        aria-label="${esc(g.exercise)} : ${fmt(cur)} sur ${fmt(g.target)} ${u}">
+        aria-label="${esc(g.exercise)} : ${fmt(cur)} sur ${fmt(g.target)} ${u}${at ? ` ${at}` : ""}">
         <span class="goal-top"><b>${esc(g.exercise)}</b>
-          <span class="tnum">${g.doneAt ? `${CHECK_PATH}` : ""}${fmt(Math.min(cur, g.target))} / ${fmt(g.target)} ${u}</span></span>
+          <span class="tnum">${g.doneAt ? `${CHECK_PATH}` : ""}${fmt(g.doneAt ? g.target : cur)} / ${fmt(g.target)} ${u}</span></span>
         <span class="goal-track"><span class="goal-fill" style="width:${Math.round(p * 100)}%"></span></span>
         <span class="goal-sub">${sub}</span>
       </button>`;
@@ -417,7 +420,7 @@ function renderGoals() {
            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter</button></header>
        ${active.length || done.length
          ? `<div class="goal-list">${active.map(row).join("")}${done.map(row).join("")}</div>`
-         : `<p class="goal-empty">Un poids à atteindre sur un exercice, ou une distance en cardio — avec une date si tu veux.</p>`}
+         : `<p class="goal-empty">Un poids ou un nombre de reps sur un exercice, une distance en cardio, ou ton poids corporel — avec une date si tu veux.</p>`}
      </section>`;
   $("goal-add").addEventListener("click", () => goalSheet());
   host.querySelectorAll("[data-goal]").forEach((b) => b.addEventListener("click", () => {
@@ -430,60 +433,144 @@ function renderGoals() {
    le sélecteur d'exercice (même raison que addExerciseSheet). */
 function goalSheet(g = null) {
   const isNew = !g || !DB.goals.some((x) => x.id === g.id);
-  g = g || { id: uid(), exercise: "", metric: "weight", target: null, deadline: null };
+  g = g || { id: uid(), exercise: "", metric: "weight", target: null, weight: null, deadline: null };
   const cardio = g.exercise && isCardio(g.exercise);
-  if (g.exercise && !cardio) g.metric = "weight";
-  if (cardio && g.metric === "weight") g.metric = "distance";
-  const cur = g.exercise ? goalLevel(g.exercise, g.metric) : null;
-  const u = GOAL_UNIT[g.metric];
+  const isBody = () => g.metric === "bodyweight";
+  if (g.exercise && !cardio && g.metric !== "reps" && !isBody()) g.metric = "weight";
+  if (cardio && (g.metric === "weight" || g.metric === "reps")) g.metric = "distance";
+  const level = () => g.exercise ? goalLevel(g.exercise, g.metric, g.weight) : null;
+  const metrics = cardio ? [["distance", "Distance"], ["minutes", "Durée"]] : [["weight", "Poids"], ["reps", "Reps"]];
+  const STEP = { weight: 20, reps: 2, distance: 1, minutes: 10 };
+  const SOURCE = { weight: "ton record", reps: "ta meilleure série", bodyweight: "ta dernière pesée" };
+  const title = () => g.exercise ? esc(g.exercise) : "Choisis un exercice";
+  /* Pour revenir à l'exercice choisi après un détour par Poids corporel. */
+  let backEx = "", backMetric = "weight";
+
+  /* « Actuellement » suit le poids tapé : 12 reps à 135 lb ne dit
+     rien de ce qu'on fait à 185. */
+  const curHtml = () => {
+    const cur = level(), at = goalWeightText(g);
+    return `Actuellement : <b>${cur ? goalAmount(g.metric, cur) : "rien encore"}${at ? ` ${at}` : ""}</b> (${SOURCE[g.metric] || "ta meilleure séance"})`;
+  };
+  const dateField = `<div class="field"><label for="goal-date">Pour le (facultatif)</label>
+         <input class="input" id="goal-date" type="date" min="${today()}" value="${esc(g.deadline || "")}"></div>`;
+  const hint = () => { const cur = level(); return cur && STEP[g.metric] ? fmt(cur + STEP[g.metric]) : ""; };
+
+  /* Ce qui dépend de la mesure : changer de mesure ne repaint que
+     ça, la feuille reste ouverte et le reste ne bouge pas. */
+  const paintFields = () => {
+    $("goal-title").innerHTML = title();
+    $("goal-ex-part").hidden = isBody();
+    /* Première pesée : sans elle, impossible de savoir si on vise à
+       perdre ou à prendre. Elle est demandée ici plutôt que d'envoyer
+       ailleurs. */
+    const noWeighIn = isBody() && !currentBodyweight();
+    const target = `<div class="field"><label for="goal-target">Objectif (${GOAL_UNIT[g.metric]})</label>
+           <input class="input" id="goal-target" type="number" inputmode="decimal" step="any" min="0" value="${g.target ?? ""}"
+                  placeholder="${hint()}"></div>`;
+    const second = g.metric === "reps"
+      ? `<div class="field"><label for="goal-weight">À quel poids (lb)</label>
+           <input class="input" id="goal-weight" type="number" inputmode="decimal" step="any" min="0" value="${g.weight ?? ""}"
+                  placeholder="Tout poids"></div>`
+      : noWeighIn
+        ? `<div class="field"><label for="goal-now">Poids actuel (lb)</label>
+             <input class="input" id="goal-now" type="number" inputmode="decimal" step="any" min="0"></div>`
+        : dateField;
+    $("goal-fields").innerHTML =
+      `${g.exercise && !noWeighIn ? `<p class="muted" id="goal-cur">${curHtml()}</p>` : ""}
+       ${noWeighIn ? `<p class="muted">Aucune pesée pour l'instant : entre ton poids d'aujourd'hui, il comptera comme une pesée.</p>` : ""}
+       <div class="row2">${target}${second}</div>
+       ${g.metric === "reps" || noWeighIn ? dateField : ""}
+       ${g.metric === "reps" ? `<p class="fineprint goal-rule">Compte quand une seule série atteint ces reps, à ce poids ou plus.</p>` : ""}`;
+    if (g.metric === "reps") $("goal-weight").addEventListener("input", () => {
+      const w = Number($("goal-weight").value.replace(",", "."));
+      g.weight = w > 0 ? w : null;
+      if ($("goal-cur")) $("goal-cur").innerHTML = curHtml();
+      $("goal-target").placeholder = hint();
+    });
+  };
 
   openSheet(
     `<p class="sheet-kicker">${isNew ? "Nouvel objectif" : "Objectif"}</p>
-     <h2 class="sheet-h">${g.exercise ? esc(g.exercise) : "Choisis un exercice"}</h2>
-     <button type="button" class="picker-pill wide${g.exercise ? " filled" : ""}" id="goal-pick">
-       <span>${g.exercise ? esc(g.exercise) : "Choisir un exercice"}</span>
-       <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
-     ${cardio ? `<div class="segmented" id="goal-metric">
-         <button type="button" data-m="distance" class="${g.metric === "distance" ? "on" : ""}">Distance</button>
-         <button type="button" data-m="minutes" class="${g.metric === "minutes" ? "on" : ""}">Durée</button></div>` : ""}
-     ${g.exercise ? `<p class="muted">Actuellement : <b>${cur ? `${fmt(cur)} ${u}` : "rien encore"}</b>${g.metric === "weight" ? " (ton record)" : " (ta meilleure séance)"}</p>` : ""}
-     <div class="row2">
-       <div class="field"><label for="goal-target">Objectif (${u})</label>
-         <input class="input" id="goal-target" type="number" inputmode="decimal" step="any" min="0" value="${g.target ?? ""}"
-                placeholder="${cur ? fmt(cur + (g.metric === "weight" ? 20 : g.metric === "distance" ? 1 : 10)) : ""}"></div>
-       <div class="field"><label for="goal-date">Pour le (facultatif)</label>
-         <input class="input" id="goal-date" type="date" min="${today()}" value="${esc(g.deadline || "")}"></div>
+     <h2 class="sheet-h" id="goal-title"></h2>
+     ${isNew ? `<div class="segmented" id="goal-kind">
+         <button type="button" data-k="ex" class="${isBody() ? "" : "on"}">Exercice</button>
+         <button type="button" data-k="body" class="${isBody() ? "on" : ""}">Poids corporel</button></div>` : ""}
+     <div id="goal-ex-part">
+       <button type="button" class="picker-pill wide${g.exercise && !isBody() ? " filled" : ""}" id="goal-pick">
+         <span>${g.exercise && !isBody() ? esc(g.exercise) : "Choisir un exercice"}</span>
+         <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+       <div class="segmented" id="goal-metric">
+         ${metrics.map(([m, label]) => `<button type="button" data-m="${m}" class="${g.metric === m ? "on" : ""}">${label}</button>`).join("")}</div>
      </div>
+     <div id="goal-fields"></div>
      <button class="primary" id="goal-save"><span class="primary-label">${isNew ? "Fixer l'objectif" : "Enregistrer"}</span></button>
      ${isNew ? "" : `<button class="ghost-btn danger-btn" id="goal-del">Supprimer l'objectif</button>`}`
   );
+  paintFields();
 
   const grab = () => {
     const t = Number($("goal-target").value.replace(",", "."));
-    g.target = t > 0 ? t : null;
+    g.target = t > 0 ? (g.metric === "reps" ? Math.round(t) : t) : null;
     g.deadline = $("goal-date").value || null;
   };
   $("goal-pick").addEventListener("click", () => {
     grab();
     closeSheet();
-    onSheetClose = () => pickExercise(g.exercise, (name) => { g.exercise = name; g.target = null; goalSheet(g); }, { create: false });
+    onSheetClose = () => pickExercise(g.exercise, (name) => { g.exercise = name; g.target = null; g.weight = null; goalSheet(g); }, { create: false });
   });
-  if (cardio) $("goal-metric").addEventListener("click", (e) => {
+  $("goal-metric").addEventListener("click", (e) => {
     const b = e.target.closest("[data-m]");
     if (!b || b.dataset.m === g.metric) return;
     grab(); g.metric = b.dataset.m; g.target = null;
-    closeSheet();
-    onSheetClose = () => goalSheet(g);
+    $("goal-metric").querySelectorAll("[data-m]").forEach((x) => x.classList.toggle("on", x === b));
+    buzz(6);
+    paintFields();
+  });
+  if (isNew) $("goal-kind").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-k]");
+    if (!b || (b.dataset.k === "body") === isBody()) return;
+    grab();
+    if (b.dataset.k === "body") {
+      backEx = g.exercise; backMetric = g.metric;
+      g.exercise = BODY_GOAL; g.metric = "bodyweight";
+    } else {
+      g.exercise = backEx; g.metric = backMetric;
+    }
+    g.target = null;
+    $("goal-kind").querySelectorAll("[data-k]").forEach((x) => x.classList.toggle("on", x === b));
+    buzz(6);
+    paintFields();
   });
   $("goal-save").addEventListener("click", () => {
     grab();
+    const u = GOAL_UNIT[g.metric];
+    if (g.metric !== "reps") g.weight = null;
+    const nowInput = $("goal-now");
+    const now = nowInput ? Number(nowInput.value.replace(",", ".")) : 0;
+    const cur = now > 0 ? now : level();
     if (!g.exercise) { toast("Choisis d'abord un exercice"); return; }
+    if (nowInput && !(now > 0)) { toast("Entre ton poids actuel"); return; }
     if (!g.target) { toast(`Entre un objectif en ${u}`); return; }
-    if (isNew && cur && g.target <= cur) { toast(`Tu es déjà à ${fmt(cur)} ${u} — vise plus haut`); return; }
+    if (isNew && isBody() && g.target === cur) { toast(`Tu es déjà à ${fmt(cur)} lb`); return; }
+    if (isNew && !isBody() && cur && g.target <= cur) {
+      toast(`Tu es déjà à ${[goalAmount(g.metric, cur), goalWeightText(g)].filter(Boolean).join(" ")} — vise plus haut`);
+      return;
+    }
+    if (now > 0) {
+      DB.bodyweight.push({ id: uid(), weight: now, date: today(), createdAt: Date.now() });
+      persist.bodyweight();
+    }
     const i = DB.goals.findIndex((x) => x.id === g.id);
     if (i >= 0) {
+      /* Autre mesure ou autre poids : la barre repart du niveau de
+         cette mesure-là, pas de l'ancienne. Pareil si un objectif de
+         poids corporel change de sens (perdre ↔ prendre). */
+      const old = DB.goals[i];
+      const flipped = isBody() && (g.target - g.start) * (old.target - old.start) <= 0;
+      if (old.metric !== g.metric || (old.weight || 0) !== (g.weight || 0) || flipped) g.start = cur || 0;
       /* Un objectif relevé au-dessus du niveau actuel redevient en cours. */
-      if (g.doneAt && g.target > goalLevel(g.exercise, g.metric)) g.doneAt = null;
+      if (g.doneAt && !goalReached(g, cur)) g.doneAt = null;
       DB.goals[i] = g;
     } else {
       DB.goals.push({ ...g, start: cur || 0, createdAt: Date.now(), doneAt: null });
@@ -498,6 +585,74 @@ function goalSheet(g = null) {
     closeSheet();
     onSheetClose = () => { renderGoals(); toast("Objectif supprimé"); };
   });
+}
+
+/* ── Récap du mois ───────────────────────────────────────────
+   Une ligne compacte sur Programmes ; le détail dans une feuille,
+   où les flèches changent de mois sans la refermer. */
+const moisDe = (m) => `${/^[ao]/.test(MOIS_L[m]) ? "d'" : "de "}${MOIS_L[m]}`;
+
+function renderMonth() {
+  const host = $("month-card");
+  if (!DB.logs.length) { host.innerHTML = ""; return; }
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  const s = monthStats(y, m);
+  const bits = [s.records.length ? `${s.records.length} record${s.records.length > 1 ? "s" : ""}` : null,
+    s.goals.length ? `${s.goals.length} objectif${s.goals.length > 1 ? "s" : ""}` : null,
+    s.sets ? `${s.sets} série${s.sets > 1 ? "s" : ""}` : null].filter(Boolean);
+  host.innerHTML =
+    `<button type="button" class="card-surface badges-row month-row" id="month-open">
+       <span class="badges-count"><b class="tnum">${s.sessions}</b><i>séance${s.sessions > 1 ? "s" : ""}</i></span>
+       <span class="badges-txt"><b>Récap ${esc(moisDe(m))}</b>
+         <em>${bits.length ? esc(bits.join(" · ")) : "Rien encore ce mois-ci"}</em></span>
+       <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+     </button>`;
+  $("month-open").addEventListener("click", () => monthSheet(y, m));
+}
+
+function monthSheet(year, month) {
+  /* Pas plus loin en arrière que la première entrée. */
+  const firstDate = DB.logs.reduce((d, l) => (!d || l.date < d ? l.date : d), null) || today();
+  const minKey = Number(firstDate.slice(0, 4)) * 12 + Number(firstDate.slice(5, 7)) - 1;
+  const now = new Date(), maxKey = now.getFullYear() * 12 + now.getMonth();
+  let key = year * 12 + month;
+
+  openSheet(
+    `<p class="sheet-kicker">Récap du mois</p>
+     <header class="cal-nav month-nav">
+       <button type="button" class="icon-btn" id="month-prev" aria-label="Mois précédent"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+       <div class="cal-month"><span class="cal-title" id="month-title" aria-live="polite"></span></div>
+       <button type="button" class="icon-btn" id="month-next" aria-label="Mois suivant"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+     </header>
+     <div id="month-body"></div>`
+  );
+
+  const paint = () => {
+    const y = Math.floor(key / 12), m = key % 12;
+    const s = monthStats(y, m), p = monthStats(Math.floor((key - 1) / 12), (key - 1) % 12);
+    $("month-title").textContent = `${MOIS_L[m]} ${y}`;
+    $("month-prev").disabled = key <= minKey;
+    $("month-next").disabled = key >= maxKey;
+    const rows = (items) => `<ul class="month-list">${items.join("")}</ul>`;
+    $("month-body").innerHTML =
+      `<div class="stat-row month-stats">
+         ${statTile(s.sessions, `Séance${s.sessions > 1 ? "s" : ""}`, statDelta(s.sessions, p.sessions))}
+         ${statTile(volumeText(s.volume), "Volume (lb)", statDelta(s.volume, p.volume, volumeText))}
+         ${statTile(fmt(s.cardio), "Cardio (min)", statDelta(s.cardio, p.cardio))}
+       </div>
+       <p class="week-foot">Petit chiffre : écart avec le mois d'avant.</p>
+       ${s.records.length ? `<p class="block-key">Records battus</p>${rows(s.records.map((r) =>
+         `<li><span>${esc(r.name)}</span><span class="tnum"><i>${fmt(r.prev)} →</i> <b>${fmt(r.weight)} lb</b></span></li>`))}` : ""}
+       ${s.goals.length ? `<p class="block-key">Objectifs atteints</p>${rows(s.goals.map((g) =>
+         `<li><span>${esc(g.exercise)}</span><span class="tnum"><b>${esc(goalLabel(g))}</b></span></li>`))}` : ""}
+       ${s.muscles.length ? `<p class="block-key">Séries par muscle</p>${rows(s.muscles.map(([name, n]) =>
+         `<li><span>${esc(name)}</span><span class="tnum"><b>${n}</b></span></li>`))}` : ""}
+       ${s.sessions ? "" : `<p class="muted pad">Aucune séance ce mois-là.</p>`}`;
+  };
+  paint();
+  const go = (d) => { key = Math.max(minKey, Math.min(maxKey, key + d)); buzz(6); paint(); };
+  $("month-prev").addEventListener("click", () => go(-1));
+  $("month-next").addEventListener("click", () => go(1));
 }
 
 /* ── Jalons ──────────────────────────────────────────────────
@@ -543,6 +698,7 @@ function renderPrograms() {
   renderWeek();
   renderBackup();
   renderGoals();
+  renderMonth();
   renderBadges();
   const host = $("program-list");
   const n = streakWeeks();
@@ -1543,7 +1699,7 @@ function celebrateOutside() {
   const goals = checkGoals(), badges = newBadges();
   if (!goals.length && !badges.length) return false;
   const g = goals[0], b = badges[0];
-  toast(g ? `Objectif atteint : ${g.exercise} · ${fmt(g.target)} ${GOAL_UNIT[g.metric]}` : `Jalon débloqué : ${b.title}`);
+  toast(g ? `Objectif atteint : ${g.exercise} · ${goalLabel(g)}` : `Jalon débloqué : ${b.title}`);
   buzz([12, 40, 12, 40, 24]);
   renderPrograms();
   return true;
@@ -1583,40 +1739,46 @@ function renderExerciseProgress() {
   /* Le cardio n'a ni poids ni reps : le même interrupteur bascule
      sur Durée / Distance. */
   const cardio = isCardio(currentEx);
-  const choices = cardio ? [["minutes", "Durée"], ["distance", "Distance"]] : [["weight", "Poids"], ["reps", "Reps"]];
+  const choices = cardio ? [["minutes", "Durée"], ["distance", "Distance"]] : [["weight", "Poids"], ["reps", "Reps"], ["e1rm", "1RM estimé"]];
   if (!choices.some(([k]) => k === metric)) metric = choices[0][0];
   $("metric-toggle").querySelectorAll("button").forEach((b, k) => {
+    b.hidden = !choices[k];
+    if (!choices[k]) return;
     b.dataset.metric = choices[k][0];
     b.textContent = choices[k][1];
     b.classList.toggle("on", b.dataset.metric === metric);
   });
+  $("ex-e1rm-note").hidden = metric !== "e1rm";
 
   if (cardio) { renderCardioProgress(); return; }
 
   const pts = seriesFor(currentEx, metric);
-  const unit = metric === "weight" ? "lb" : "reps";
+  const unit = metric === "reps" ? "reps" : "lb";
+  const isE1rm = metric === "e1rm";
+  if (!pts.length) $("ex-e1rm-note").hidden = true;
 
   /* Les records ne sont PAS une deuxième couleur : anneau + étiquette. */
   const prSet = new Set();
   let best = -Infinity;
-  seriesFor(currentEx, "weight").forEach((p) => { if (p.y > best) { best = p.y; prSet.add(p.x); } });
+  seriesFor(currentEx, isE1rm ? "e1rm" : "weight").forEach((p) => { if (p.y > best) { best = p.y; prSet.add(p.x); } });
+  const showPR = metric !== "reps";
 
   const first = pts[0], last = pts[pts.length - 1];
   const delta = pts.length > 1 ? last.y - first.y : 0;
   $("ex-stats").innerHTML = pts.length ? `
-    <div class="stat"><span class="stat-val tnum">${fmt(DB.prs[currentEx] ?? bestWeight(currentEx))}</span><span class="stat-key">Record (lb)</span></div>
+    <div class="stat"><span class="stat-val tnum">${fmt(isE1rm ? best : DB.prs[currentEx] ?? bestWeight(currentEx))}</span><span class="stat-key">${isE1rm ? "Meilleur" : "Record"} (lb)</span></div>
     <div class="stat"><span class="stat-val tnum">${fmt(last.y)}</span><span class="stat-key">Dernière (${unit})</span></div>
     <div class="stat"><span class="stat-val tnum">${delta > 0 ? "+" : ""}${fmt(delta)}</span><span class="stat-key">Depuis le début</span></div>` : "";
 
   renderChart($("ex-chart"), pts, {
-    unit, prSet: metric === "weight" ? prSet : new Set(),
-    label: `Progression — ${currentEx}`,
-    empty: "Aucune donnée pour cet exercice.",
+    unit, prSet: showPR ? prSet : new Set(),
+    label: `${isE1rm ? "1RM estimé" : "Progression"} — ${currentEx}`,
+    empty: isE1rm ? "Il faut une série avec un poids pour estimer un 1RM." : "Aucune donnée pour cet exercice.",
   });
 
   /* Vue tableau : l'information ne doit jamais exister qu'en image. */
   $("ex-table").innerHTML = pts.slice().reverse().map((p) =>
-    `<div class="vrow"><span>${esc(longDate(p.x))}</span><b class="tnum">${fmt(p.y)} ${esc(unit)}</b>${prSet.has(p.x) && metric === "weight" ? '<em>record</em>' : ""}</div>`).join("");
+    `<div class="vrow"><span>${esc(longDate(p.x))}</span><b class="tnum">${fmt(p.y)} ${esc(unit)}</b>${prSet.has(p.x) && showPR ? '<em>record</em>' : ""}</div>`).join("");
 }
 
 /* ── Séries par muscle ─────────────────────────────────────

@@ -54,6 +54,141 @@ un superset entier.
 | **Glisser le calendrier** | Il résiste au lieu de partir : il annonce qu'il y a un mois de l'autre côté, et c'est la vitesse au relâchement qui décide. Le nouveau mois entre du côté d'où vient le geste. |
 | **Tirer une feuille vers le bas** | Elle suit le doigt, résiste vers le haut, et un coup sec la referme même à mi-chemin. |
 
+## La fiche d'exercice
+
+Une seule feuille pour modifier un exercice, d'où qu'on vienne
+(`js/fiche.js`) : l'éditeur de programme, le menu ⋯ en séance, une
+entrée d'historique (corriger ou ajouter), Réglages → Mes exercices.
+Toujours le même ordre :
+
+1. **Étiquette** — ce qu'on modifie : *Dans « Push »*, *Cette séance
+   seulement*, *Entrée · jeudi 1 octobre*, *Mes exercices*…
+2. **Nom** — avec un chevron quand on peut le changer.
+3. **Ce qui ne vaut qu'ici** — séries, reps, poids, durée.
+4. **L'exercice — partout** — muscle, note et vidéo, en rangées qui
+   se déplient.
+5. **Actions de l'endroit** (passer, remplacer, historique…).
+6. **Enregistrer**, vert, toujours en bas ; l'action destructive
+   (retirer, supprimer) en texte rouge discret dessous.
+
+Rien ne s'écrit avant *Enregistrer* ; une action (passer, remplacer…)
+enregistre d'abord ce qui a été changé. Les chiffres sont des − / +
+qu'on peut toucher pour taper au clavier. Les reps d'un programme
+acceptent une fourchette (« 8-10 ») : le − / + décale les deux bornes.
+
+L'éditeur de programme demande avant de quitter s'il y a des
+changements non enregistrés (flèche retour ou glissé depuis le bord).
+
+## Modifier une séance en cours
+
+Le bouton **⋯** en haut à droite de la séance ouvre une feuille sur
+l'exercice affiché (dans un superset, on choisit A1, A2… en haut).
+Tout ce qui s'y change ne vaut **que pour aujourd'hui** : le programme
+ne bouge pas.
+
+- **Séries − / +** — jamais sous le nombre de séries déjà faites.
+- **Remplacer** — seulement tant qu'aucune série n'est validée.
+- **Passer** — l'exercice ne compte plus ; les séries déjà faites sont
+  gardées. Une ligne « passé aujourd'hui · Reprendre » reste sur la
+  carte : passer n'est jamais définitif.
+- **Note technique** — la note permanente de l'exercice, affichée sur
+  sa carte à chaque séance (la même que dans Réglages).
+- **Ajouter un exercice** — musculation ou cardio, avec une case pour
+  le garder aussi dans le programme.
+
+Un exercice déjà écrit dans l'historique qui reçoit une série de plus
+**réécrit** son entrée (`updateLog`), il n'en crée pas une deuxième.
+
+**Note de séance** : un champ dans la feuille de fin. Elle s'affiche
+dans l'Historique sous la journée ; la toucher permet de la corriger ou
+de la supprimer.
+
+**Suggestion de progression.** Même poids aux 3 dernières séances d'un
+exercice → une bulle sur la carte (« 3 séances de suite à 135 lb — essaie
+140 aujourd'hui ? »). Rien ne change tant qu'on ne touche pas *Essayer* ;
+*Pas aujourd'hui* la fait disparaître. Le pas est de 5 lb dès 100 lb,
+2,5 lb en dessous.
+
+**Historique d'un exercice** — menu ⋯ en séance, ou *Toutes les séances*
+sous la courbe de Progrès : chaque séance, série par série. L'anneau
+« record » ne marque qu'une série, la première à avoir atteint le record.
+
+**Le X ne termine rien tout seul.** Il ouvre le bilan ; seule
+*Terminer la séance* ferme la séance. Toucher en haut, glisser la
+feuille vers le bas ou *Continuer la séance* y ramène, chrono compris.
+Sans aucune série validée, le X demande avant de quitter.
+
+**Reprendre une séance.** Tout l'état de la séance est recopié dans
+`wt2-live-session` à chaque changement. Si l'app se ferme en plein milieu,
+la rouvrir y ramène (jusqu'à 6 h plus tard). Effacé en fermant la séance.
+
+**Séance libre** (Programmes → *Séance libre*) : une séance sans programme,
+les exercices s'ajoutent au fil de l'eau. À la fin, *Enregistrer cette séance
+comme programme* garde les exercices faits et rattache les entrées au
+nouveau programme.
+
+**Vidéo de technique** : un lien (YouTube, TikTok…) par exercice, depuis le
+menu ⋯ → *Note et vidéo de technique* ou Réglages → Gérer mes exercices
+(`wt2-links`). Il s'affiche sur la carte en séance.
+
+**Sélecteur d'exercice filtré** : en ajoutant un cardio on ne voit que le
+cardio, et inversement ; un nom qui existe déjà de l'autre type n'est pas
+recréé.
+
+## Autres outils
+
+- **Objectifs** (Programmes) — un poids à atteindre (le record), un nombre
+  de reps en une série (à un poids minimum ou à n'importe quel poids), une
+  distance/durée en cardio (la meilleure séance), ou un poids corporel à
+  atteindre, en montant ou en descendant (la dernière pesée), avec date
+  facultative. Ce qui reste s'affiche sur la carte de l'exercice en séance
+  et suit les séries validées.
+  Barre de progression depuis le niveau au moment de le fixer ; bandeau
+  « Objectif atteint » en séance, toast ailleurs (`wt2-goals`).
+- **Jalons** — 21 paliers (séances, semaines d'affilée, volume, km et heures
+  de cardio), calculés depuis l'historique. Seul ce qui a été fêté est
+  retenu (`wt2-badges-seen`) ; au premier lancement, les jalons déjà acquis
+  sont notés sans fête.
+
+- **Récap du mois** (Programmes) — séances, volume, cardio comparés au mois
+  d'avant, records battus, objectifs atteints et séries par muscle ; les
+  flèches changent de mois. Tout est recalculé depuis l'historique.
+- **1RM estimé** (Progrès → Exercices) — la meilleure série de chaque séance
+  ramenée à une rep (Epley), pour comparer des séries de poids et de reps
+  différents. Rien pour une série sans poids.
+- **Bilan de la semaine** (haut de Programmes) — séances, volume et
+  minutes de cardio du lundi à aujourd'hui, avec l'écart face à la
+  semaine passée, en encre neutre (un « −2 » n'est pas une faute).
+- **Rappel de sauvegarde** — 30 jours sans export (ou jamais, après deux
+  semaines d'historique) : une carte propose d'exporter. *Plus tard*
+  repousse d'une semaine. Date du dernier export : `wt2-last-export`.
+- **Séries par muscle** (Progrès → Muscles) — cette semaine ou 4
+  semaines, comparé à la période d'avant. Le muscle est deviné d'après
+  le nom (`guessMuscle`, FR et EN) et se corrige en touchant un muscle,
+  ou dans Réglages → Gérer mes exercices (`wt2-muscles`). Ordre fixe des
+  muscles, et un muscle à zéro reste affiché : c'est lui qu'on cherche.
+- **Corriger une entrée** — toucher une ligne de l'Historique : date,
+  séries une par une (ajouter/retirer), ou les champs du cardio. Le
+  record est recalculé, il peut aussi baisser (`editLog`).
+- **Dupliquer un programme** — dans sa fiche ; la copie prend sa propre
+  couleur et s'ouvre dans l'éditeur.
+- **Programmes livrés** — `GIFTS` dans `data.js` : un programme préparé
+  hors de l'app (avec ses notes et muscles) arrive au prochain lancement
+  après un déploiement. Ajouté une seule fois par appareil (`wt2-gifts`),
+  donc le supprimer ne le fait pas revenir ; notes et muscles déjà choisis
+  ne sont jamais écrasés. Livrés : « Muscles oubliés » (2026-10-02), « Bras » (2026-10-04), « Dos & Pecs » (2026-10-12).
+
+## Le cardio
+
+Un exercice porte `kind: "cardio"` (dans le programme comme dans
+l'historique). Pas de poids ni de reps : **durée** (obligatoire),
+**distance** et **calories** (facultatives), **intensité** Facile /
+Modéré / Intense. En séance il a sa propre carte avec des champs à
+taper ; il ne s'enchaîne jamais en superset. Il n'entre ni dans les
+records ni dans le volume en lb. Dans Progrès, l'interrupteur
+Poids/Reps devient Durée/Distance. Entrée manuelle : Historique →
+*Ajouter une entrée* → Cardio.
+
 ## Les supersets
 
 Un superset, ce sont des exercices **qui se suivent** et qui portent le
@@ -160,7 +295,8 @@ franches).
 ## Données
 
 Tout est sous le préfixe **`wt2-`** dans `localStorage` : `wt2-programs`,
-`wt2-logs`, `wt2-bodyweight`, `wt2-notes`, `wt2-prs`, `wt2-sessions`.
+`wt2-logs`, `wt2-bodyweight`, `wt2-notes`, `wt2-prs`, `wt2-sessions`,
+`wt2-journal` (notes de séance), `wt2-muscles`, `wt2-goals`, `wt2-links`, `wt2-badges-seen`, `wt2-live-session` (séance en cours).
 Les deux apps partagent l'origine `emilerioux.github.io`, donc ce préfixe est
 ce qui garantit qu'on n'écrase jamais l'ancienne. Les photos vivent dans une
 base IndexedDB séparée (`reps-photos`).
@@ -204,6 +340,7 @@ js/theme.js     mode clair/sombre, dix accents, tokens dérivés
 js/motion.js    ressorts, projection, élastique, gestes réutilisables
 js/data.js      modèle, stockage wt2-, import/export, photos
 js/chart.js     graphiques SVG mono-série avec viseur et infobulle
+js/fiche.js     la fiche d'exercice commune : − / + tapables, « partout »
 js/session.js   l'écran de séance
 js/views.js     les quatre onglets, navigation, feuilles, sélecteurs
 js/app.js       amorçage et câblage

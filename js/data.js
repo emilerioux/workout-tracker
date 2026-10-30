@@ -71,9 +71,10 @@ const DB = {
   /* Muscle choisi à la main pour un exercice. Sans entrée ici,
      le muscle est deviné d'après le nom (guessMuscle). */
   muscles:    load(K.muscles, {}),
-  /* Objectifs : { id, exercise, metric ("weight" | "minutes" |
-     "distance"), start, target, deadline|null, createdAt,
-     doneAt|null }. `start` = le niveau au moment de le fixer. */
+  /* Objectifs : { id, exercise, metric ("weight" | "reps" | "minutes" |
+     "distance" | "bodyweight"), start, target, weight|null, deadline|null,
+     createdAt, doneAt|null }. `start` = le niveau au moment de le
+     fixer ; `weight` = poids minimum d'un objectif de reps. */
   goals:      load(K.goals, []),
   /* Lien vers une vidéo de technique, par nom d'exercice. */
   links:      load(K.links, {}),
@@ -166,12 +167,24 @@ function seriesFor(name, metric) {
       if (cardioLog(l)) {
         return { x: l.createdAt, y: metric === "distance" ? l.distance : l.minutes, date: l.date, log: l };
       }
+      if (metric === "e1rm") {
+        return { x: l.createdAt, y: Math.round(Math.max(...(l.perSet || [l]).map((s) => e1rm(s.weight, s.reps)))), date: l.date, log: l };
+      }
       const top = l.perSet ? l.perSet.reduce((a, b) => (b.weight > a.weight ? b : a)) : null;
       const value = metric === "reps"
         ? (top ? top.reps : l.reps)
         : (top ? top.weight : l.weight);
       return { x: l.createdAt, y: value, date: l.date, log: l };
-    });
+    })
+    .filter((p) => metric !== "e1rm" || p.y > 0);
+}
+
+/* 1RM estimé (Epley) : ce qu'une série vaudrait en une seule rep,
+   pour comparer 155 lb × 10 à 185 lb × 5. Sans poids, rien à estimer. */
+function e1rm(weight, reps) {
+  const w = Number(weight), r = Number(reps);
+  if (!(w > 0) || !(r > 0)) return 0;
+  return r === 1 ? w : w * (1 + r / 30);
 }
 
 /* Nombre de semaines consécutives avec au moins une séance. */
@@ -252,33 +265,122 @@ function setsByMuscle(k, n) {
 
 /* ── Objectifs ─────────────────────────────────────────────
    Un objectif vise un niveau sur UN exercice : un poids (le
-   record) en musculation, une durée ou une distance (la meilleure
-   séance) en cardio. Atteint une fois = atteint pour de bon, même
+   record) ou des reps (la meilleure série, à un poids minimum ou
+   non) en musculation, une durée ou une distance (la meilleure
+   séance) en cardio. Le poids corporel, lui, vise la dernière pesée
+   et peut descendre. Atteint une fois = atteint pour de bon, même
    si une correction fait redescendre le record ensuite. */
-const GOAL_UNIT = { weight: "lb", minutes: "min", distance: "km" };
+const GOAL_UNIT = { weight: "lb", reps: "reps", minutes: "min", distance: "km", bodyweight: "lb" };
+const BODY_GOAL = "Poids corporel";
 
-function goalLevel(exercise, metric) {
+/* La pesée la plus récente, 0 s'il n'y en a pas. */
+function currentBodyweight() {
+  let last = null;
+  for (const b of DB.bodyweight) if (!last || b.createdAt > last.createdAt) last = b;
+  return last ? Number(last.weight) || 0 : 0;
+}
+
+/* « 1 rep », « 10 reps », « 185 lb » */
+const goalAmount = (metric, n) => metric === "reps"
+  ? `${fmt(n)} rep${n > 1 ? "s" : ""}`
+  : `${fmt(n)} ${GOAL_UNIT[metric]}`;
+const goalWeightText = (g) => g.metric === "reps" && g.weight ? `à ${fmt(g.weight)} lb` : "";
+/* « 10 reps à 135 lb » */
+const goalLabel = (g) => [goalAmount(g.metric, g.target), goalWeightText(g)].filter(Boolean).join(" ");
+
+/* Le plus de reps en une série, à `minWeight` lb ou plus. */
+function bestReps(name, minWeight = 0) {
+  let best = 0;
+  for (const l of DB.logs) {
+    if (l.exercise !== name || cardioLog(l)) continue;
+    for (const s of l.perSet || [l]) {
+      if (Number(s.weight) >= minWeight && Number(s.reps) > best) best = Number(s.reps);
+    }
+  }
+  return best;
+}
+
+function goalLevel(exercise, metric, minWeight = 0) {
   if (metric === "weight") return DB.prs[exercise] ?? bestWeight(exercise);
+  if (metric === "reps") return bestReps(exercise, minWeight || 0);
+  if (metric === "bodyweight") return currentBodyweight();
   return DB.logs
     .filter((l) => l.exercise === exercise && cardioLog(l))
     .reduce((m, l) => Math.max(m, Number(l[metric]) || 0), 0);
 }
 
+/* Seul le poids corporel peut viser plus bas qu'au départ. */
+const goalDown = (g) => g.metric === "bodyweight" && g.target < g.start;
+const goalReached = (g, cur) => goalDown(g) ? cur > 0 && cur <= g.target : cur >= g.target;
+
 function goalProgress(g) {
-  const cur = goalLevel(g.exercise, g.metric);
-  const span = g.target - g.start;
-  const p = g.doneAt ? 1 : span > 0 ? Math.max(0, Math.min(1, (cur - g.start) / span)) : (cur >= g.target ? 1 : 0);
+  const cur = goalLevel(g.exercise, g.metric, g.weight);
+  const span = Math.abs(g.target - g.start);
+  const moved = goalDown(g) ? g.start - cur : cur - g.start;
+  const p = g.doneAt ? 1 : (g.metric === "bodyweight" ? span > 0 : g.target > g.start)
+    ? Math.max(0, Math.min(1, moved / span))
+    : (goalReached(g, cur) ? 1 : 0);
   return { cur, p };
 }
 
-/* Marque les objectifs qui viennent d'être atteints et les renvoie. */
-function checkGoals() {
+/* Le niveau en comptant aussi les séries de la séance en cours, qui
+   n'entrent dans l'historique qu'une fois l'exercice terminé. */
+function liveLevel(g, sets = []) {
+  return sets.reduce((m, s) => {
+    if (g.metric !== "reps") return Math.max(m, Number(s[g.metric]) || 0);
+    return Number(s.weight) >= (g.weight || 0) ? Math.max(m, Number(s.reps) || 0) : m;
+  }, goalLevel(g.exercise, g.metric, g.weight));
+}
+
+/* Marque les objectifs qui viennent d'être atteints et les renvoie.
+   `live` = { exercise, sets } : l'exercice en cours en séance. */
+function checkGoals(live = null) {
   const hit = [];
   DB.goals.forEach((g) => {
-    if (!g.doneAt && goalLevel(g.exercise, g.metric) >= g.target) { g.doneAt = Date.now(); hit.push(g); }
+    if (g.doneAt) return;
+    const cur = live && g.exercise === live.exercise ? liveLevel(g, live.sets) : goalLevel(g.exercise, g.metric, g.weight);
+    if (goalReached(g, cur)) { g.doneAt = Date.now(); hit.push(g); }
   });
   if (hit.length) persist.goals();
   return hit;
+}
+
+/* ── Récap du mois ─────────────────────────────────────────
+   Tout se recalcule depuis l'historique. Un record du mois = une
+   entrée qui dépasse tout ce qui précède ; la toute première fois
+   sur un exercice n'en est pas un. */
+function monthStats(year, month) {
+  const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const inMonth = (l) => String(l.date).startsWith(prefix);
+  const logs = DB.logs.filter(inMonth);
+
+  const best = {}, records = {};
+  [...DB.logs].sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.createdAt - b.createdAt).forEach((l) => {
+    if (cardioLog(l)) return;
+    const top = Math.max(...(l.perSet || [l]).map((s) => Number(s.weight) || 0));
+    const prev = best[l.exercise] || 0;
+    if (top <= prev) return;
+    best[l.exercise] = top;
+    if (!prev || !inMonth(l)) return;
+    records[l.exercise] = { name: l.exercise, weight: top, prev: records[l.exercise]?.prev ?? prev };
+  });
+
+  const muscles = {};
+  logs.forEach((l) => { if (!cardioLog(l)) muscles[muscleOf(l.exercise)] = (muscles[muscleOf(l.exercise)] || 0) + setsOf(l); });
+
+  return {
+    sessions: new Set(logs.map((l) => l.date)).size,
+    volume: logs.reduce((n, l) => n + volumeOf(l), 0),
+    cardio: logs.reduce((n, l) => n + (cardioLog(l) ? Number(l.minutes) || 0 : 0), 0),
+    sets: logs.reduce((n, l) => n + setsOf(l), 0),
+    records: Object.values(records),
+    goals: DB.goals.filter((g) => {
+      if (!g.doneAt) return false;
+      const d = new Date(g.doneAt);
+      return d.getFullYear() === year && d.getMonth() === month;
+    }),
+    muscles: Object.entries(muscles).sort((a, b) => b[1] - a[1]),
+  };
 }
 
 /* ── Jalons ────────────────────────────────────────────────
