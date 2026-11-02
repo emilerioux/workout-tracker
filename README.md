@@ -176,7 +176,8 @@ recréé.
   hors de l'app (avec ses notes et muscles) arrive au prochain lancement
   après un déploiement. Ajouté une seule fois par appareil (`wt2-gifts`),
   donc le supprimer ne le fait pas revenir ; notes et muscles déjà choisis
-  ne sont jamais écrasés. Livrés : « Muscles oubliés » (2026-10-02), « Bras » (2026-10-04), « Dos & Pecs » (2026-10-12).
+  ne sont jamais écrasés. Livrés : « Muscles oubliés » (2026-10-02), « Bras » (2026-10-04), « Dos & Pecs » (2026-10-12),
+  puis le **Bloc 1 « Fondations 5 jours »** du coach (2026-11-02 : Push, Pull, Legs, Upper, Lower, 6 semaines).
 
 ## Les blocs du coach
 

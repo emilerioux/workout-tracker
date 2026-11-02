@@ -654,6 +654,12 @@ function importOldApp() {
    dans le code. Chacun n'est ajouté qu'UNE fois par appareil
    (`wt2-gifts`) : le supprimer ne le fait pas revenir. Les notes
    et muscles ne remplacent jamais ceux déjà choisis. */
+
+/* Plan d'un exercice de bloc sur 6 semaines : `s1` séries, puis `s2`
+   à partir de la semaine 3, même fourchette de reps (double progression). */
+const weeksOf = (reps, cue = "", s1 = 3, s2 = 3, n = 6) =>
+  Array.from({ length: n }, (_, k) => ({ sets: k >= 2 ? s2 : s1, reps, ...(cue ? { cue } : {}) }));
+
 const GIFTS = [
   {
     id: "gift-muscles-oublies",
@@ -749,6 +755,88 @@ const GIFTS = [
       "Single-arm lat pulldown": "Reps par bras. À genoux de côté sous la poulie haute, poignée simple. Laisse le bras monter pour étirer le dorsal, puis tire le coude vers la hanche.",
       "Push-ups": "Corps gainé en planche. Poitrine jusqu'à quelques cm du sol.",
       "Cable pullover": "Debout face à la poulie haute, barre droite ou corde. Bras presque tendus, descends les mains en arc jusqu'aux cuisses en contractant les dorsaux.",
+    },
+  },
+  /* Bloc 1 du coach (2026-11-02), préparé avec /coach à partir de
+     l'export du 2 nov. : 5 séances par rotation, deux jambes au lieu
+     d'une, relancer le DB incline, monter vers 6 tractions. Les noms
+     d'exercices déjà connus sont gardés à l'identique. */
+  {
+    id: "gift-bloc-1",
+    block: {
+      n: 1,
+      name: "Fondations 5 jours",
+      focus: "Deux séances de jambes par rotation, relancer le DB incline et monter vers 6 tractions, sans perdre ton bench.",
+      weeks: 6,
+      goals: [
+        { exercise: "Pull Ups", metric: "reps", target: 6, weight: null, deadline: "bloc",
+          why: "Ton record est 4 : l'étape vers tes 10 d'avril." },
+        { exercise: "DB incline bench", metric: "reps", target: 10, weight: 70, deadline: "bloc",
+          why: "Bloqué à 60 lb depuis 3 séances ; ton record à 70 lb est 7 reps." },
+        { exercise: "Goblet Squat", metric: "weight", target: 65, deadline: "bloc",
+          why: "Tu es passé de 30 à 45 lb en 5 séances : on continue." },
+      ],
+    },
+    programs: [
+      { key: "push", name: "Push", exercises: [
+        { name: "BB bench press", sets: 3, reps: "3-5", group: 0, weeks: weeksOf("3-5", "+5 lb quand toutes les séries font 5", 3, 4) },
+        { name: "DB incline bench", sets: 3, reps: "8-10", group: 1, weeks: weeksOf("8-10", "Repars à 60 lb ; 10 reps partout → +5 lb", 3, 4) },
+        { name: "Chest fly", sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "Étirement contrôlé en bas") },
+        { name: "Dips", sets: 3, reps: "10-15", group: 3, weeks: weeksOf("10-15", "15 reps partout → ajoute du poids") },
+        { name: "Skull crusher", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "Essaie 30 lb, même à 8 reps") },
+        { name: "Seated DB shoulder press", sets: 3, reps: "8-10", group: 4, isNew: true, weeks: weeksOf("8-10", "Dos appuyé ; 10 reps partout → +5 lb") },
+      ] },
+      { key: "pull", name: "Pull", exercises: [
+        { name: "Pull Ups", sets: 3, reps: "max", group: 0, weeks: weeksOf("max", "Note tes reps : on vise 6") },
+        { name: "Negative pull-ups", sets: 3, reps: "3-5", group: 1, isNew: true, weeks: [
+          ...weeksOf("3-5", "Saute en haut, descends en 4-5 s").slice(0, 3),
+          ...weeksOf("4-6", "Descente de 5 s, contrôlée jusqu'en bas").slice(3) ] },
+        { name: "Lateral Row", sets: 3, reps: "10-12", group: 2, weeks: [
+          ...weeksOf("10-12", "+5 lb quand 12 reps partout").slice(0, 2),
+          ...weeksOf("8-10", "Plus lourd, moins de reps", 4, 4).slice(2, 4),
+          ...weeksOf("6-8", "Monte vers 170 lb", 4, 4).slice(4) ] },
+        { name: "Vertical pull down", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout") },
+        { name: "Reverse cable flys", sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12") },
+        { name: "Shrugs DB", sets: 3, reps: "15", group: 5, weeks: weeksOf("15", "Pause 1 s en haut") },
+        { name: "Curl Marteau", sets: 3, reps: "10-12", group: 5, weeks: weeksOf("10-12", "12 reps partout → 40 lb") },
+      ] },
+      { key: "legs", name: "Legs", exercises: [
+        { name: "Goblet Squat", sets: 3, reps: "10-12", group: 0, weeks: weeksOf("10-12", "+5 lb chaque semaine", 3, 4) },
+        { name: "Single leg leg press", sets: 3, reps: "10-12", group: 1, isNew: true, weeks: weeksOf("10-12", "Reps par jambe ; commence léger") },
+        { name: "Leg Extension", sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout", 3, 4) },
+        { name: "Leg Curl", sets: 3, reps: "12-15", group: 3, weeks: weeksOf("12-15") },
+        { name: "Mollets debout", sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12", "Pause 2 s en bas, étirement complet") },
+      ] },
+      { key: "upper", name: "Upper", exercises: [
+        { name: "Military press", sets: 3, reps: "4-6", group: 0, weeks: weeksOf("4-6", "+5 lb quand 4 × 6 passe", 3, 4) },
+        { name: "DB bench press", sets: 4, reps: "6-8", group: 1, weeks: weeksOf("6-8", "8 reps partout → +5 lb", 4, 4) },
+        { name: "T bar row", sets: 4, reps: "6-8", group: 1, weeks: weeksOf("6-8", "+10 lb quand 8 reps partout", 4, 4) },
+        { name: "Close grip lat pulldown", sets: 3, reps: "12", group: 2, weeks: weeksOf("12") },
+        { name: "Lateral raise", sets: 3, reps: "15", group: 3, weeks: weeksOf("15") },
+        { name: "Face pull", sets: 3, reps: "12-15", group: 3, isNew: true, weeks: weeksOf("12-15", "Coudes hauts, tire vers le front") },
+        { name: "Curl barre EZ", sets: 3, reps: "8-10", group: 4, weeks: weeksOf("8-10") },
+        { name: "Pushdown triceps (corde)", sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
+        { name: "7-7-7", sets: 2, reps: "21", group: 5, weeks: weeksOf("21", "", 2, 2) },
+      ] },
+      { key: "lower", name: "Lower", exercises: [
+        { name: "Barbell Hip Trust", sets: 3, reps: "8-10", group: 0, weeks: [
+          ...weeksOf("8-10", "+10 lb quand 10 reps partout", 3, 4).slice(0, 4),
+          ...weeksOf("6-8", "Vise 245 lb", 4, 4).slice(4) ] },
+        { name: "DB Romanian deadlift", sets: 3, reps: "8-10", group: 1, isNew: true, weeks: weeksOf("8-10", "Hanches en arrière, dos plat, sens les ischios") },
+        { name: "Leg press", sets: 3, reps: "10-12", group: 2, isNew: true, weeks: weeksOf("10-12", "Pieds largeur d'épaules, descends à 90°", 3, 4) },
+        { name: "Abducteur machine", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12") },
+        { name: "Abdo machine", sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
+      ] },
+    ],
+    /* « close grip » serait deviné triceps. */
+    muscles: { "Close grip lat pulldown": "Dos" },
+    notes: {
+      "Seated DB shoulder press": "Banc à 80-90°, dos collé. Haltères à hauteur des oreilles, pousse au-dessus de la tête sans cambrer.",
+      "Negative pull-ups": "Monte en sautant (ou avec un banc), menton au-dessus de la barre, puis descends le plus lentement possible jusqu'aux bras tendus.",
+      "Single leg leg press": "Une jambe à la fois, pied au milieu de la plateforme. Descends contrôlé sans que le bas du dos décolle.",
+      "Face pull": "Corde à hauteur du visage, tire vers le front en écartant les mains. Coudes hauts.",
+      "DB Romanian deadlift": "Haltères devant les cuisses, genoux légèrement fléchis. Pousse les hanches en arrière, dos plat, jusqu'à sentir l'étirement des ischios, puis remonte en serrant les fessiers.",
+      "Leg press": "Pieds largeur d'épaules au milieu de la plateforme. Descends jusqu'à ~90° aux genoux, sans décoller le bas du dos. Ne verrouille pas les genoux en haut.",
     },
   },
 ];
