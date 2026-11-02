@@ -178,6 +178,43 @@ recréé.
   donc le supprimer ne le fait pas revenir ; notes et muscles déjà choisis
   ne sont jamais écrasés. Livrés : « Muscles oubliés » (2026-10-02), « Bras » (2026-10-04), « Dos & Pecs » (2026-10-12).
 
+## Les blocs du coach
+
+Tous les 6 à 8 semaines, Claude (skill `/coach`, dans `.claude/skills/coach/`)
+prépare un **bloc** : plusieurs programmes en rotation (A → B → C, pas de
+jours fixes), un plan semaine par semaine pour chaque exercice, et des
+objectifs proposés. La boucle :
+
+1. **Le bloc arrive** comme un programme livré : une entrée de `GIFTS` avec
+   un champ `block` et une liste `programs` (`addBlockGift`). Carte
+   « Nouveau bloc du coach » en haut de Programmes ; le compteur ne part
+   qu'au toucher de **Commencer le bloc** (`start`). Le bloc d'avant est
+   alors rangé (`endedAt`), jamais effacé.
+2. **Pendant le bloc** — la carte dit « Bloc 2 · semaine 4 sur 6 », une case
+   par semaine, et la **Prochaine séance** de la rotation. En séance, les
+   séries et les reps de départ sont celles de la semaine (`e.weeks`), avec
+   la consigne du coach sous le titre ; tout reste ajustable. Les exercices
+   ajoutés par le coach portent « Nouveau ».
+3. **Objectifs proposés** — Accepter les place dans les objectifs, partis du
+   niveau actuel (`deadline: "bloc"` = fin du bloc). Non merci les écarte.
+4. **Changer un exercice** — dans l'éditeur, ou en séance via ⋯ → Remplacer →
+   *Pour le reste du bloc*. Le plan suit le nouvel exercice ; changer soi-même
+   les séries ou les reps le remplace. Chaque remplacement ou retrait est noté
+   dans `swaps` : le coach ne le repropose pas.
+5. **Fin du bloc** — la carte invite à **Envoyer au coach** : un JSON
+   (`coachPayload` : bilan, programmes, logs du bloc, exercices favoris,
+   remplacements) part par la feuille de partage iOS, ou se télécharge. Sans
+   bloc, Réglages → Coach envoie tout l'historique pour préparer le premier.
+
+**Mes blocs** (bas de la liste, ou Réglages → Coach) range tous les blocs,
+avec leurs dates, programmes et bilan (régularité par semaine, records, plus
+gros progrès en 1RM estimé, exercices qui stagnent, séries par muscle par
+semaine, exercices changés). Les programmes d'un bloc terminé n'encombrent
+plus la liste principale. Données : `wt2-blocks`.
+
+> Un bloc livré par `GIFTS` est dans le code, donc public sur GitHub — jamais
+> d'objectif de poids corporel dedans.
+
 ## Le cardio
 
 Un exercice porte `kind: "cardio"` (dans le programme comme dans
@@ -266,6 +303,14 @@ sont donc marqués par un **anneau et une étiquette**, jamais par une deuxième
 couleur. Un bouton *Voir les valeurs* affiche le tableau : l'information
 n'existe jamais uniquement en image.
 
+La courbe est **lisse mais monotone** (Fritsch–Carlson, `smoothPath`) : arrondie,
+elle ne dépasse jamais un point, donc pas de faux pic au-dessus d'un record.
+L'échelle garde ~12 % d'air en haut et en bas. Au-delà de 12 séances, seuls les
+records et le dernier point gardent leur pastille. La dernière valeur est dans
+une pastille placée au-dessus de toute la courbe qu'elle couvre. Le tracé se
+dessine à l'apparition (une fois par série, jamais avec « réduire les
+animations »).
+
 ## Thème
 
 Deux axes indépendants, dans Réglages → *Apparence*.
@@ -296,7 +341,7 @@ franches).
 
 Tout est sous le préfixe **`wt2-`** dans `localStorage` : `wt2-programs`,
 `wt2-logs`, `wt2-bodyweight`, `wt2-notes`, `wt2-prs`, `wt2-sessions`,
-`wt2-journal` (notes de séance), `wt2-muscles`, `wt2-goals`, `wt2-links`, `wt2-badges-seen`, `wt2-live-session` (séance en cours).
+`wt2-journal` (notes de séance), `wt2-muscles`, `wt2-goals`, `wt2-links`, `wt2-blocks` (blocs du coach), `wt2-badges-seen`, `wt2-live-session` (séance en cours).
 Les deux apps partagent l'origine `emilerioux.github.io`, donc ce préfixe est
 ce qui garantit qu'on n'écrase jamais l'ancienne. Les photos vivent dans une
 base IndexedDB séparée (`reps-photos`).

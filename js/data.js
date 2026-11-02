@@ -22,6 +22,7 @@ const K = {
   live:      "wt2-live-session",
   badges:    "wt2-badges-seen",
   gifts:     "wt2-gifts",
+  blocks:    "wt2-blocks",
   hint:     "wt2-hint-seen",
   scrub:    "wt2-scrub-learned",
   accentFix: "wt2-accents-v1",
@@ -78,6 +79,10 @@ const DB = {
   goals:      load(K.goals, []),
   /* Lien vers une vidéo de technique, par nom d'exercice. */
   links:      load(K.links, {}),
+  /* Blocs du coach : { id, n, name, focus, weeks, start|null,
+     endedAt|null, programIds, goals, swaps, deliveredAt }. Voir
+     « Blocs du coach » plus bas. */
+  blocks:     load(K.blocks, []),
 };
 
 const persist = {
@@ -91,6 +96,7 @@ const persist = {
   muscles:    () => save(K.muscles, DB.muscles),
   goals:      () => save(K.goals, DB.goals),
   links:      () => save(K.links, DB.links),
+  blocks:     () => save(K.blocks, DB.blocks),
 };
 
 /* ── Cardio ─────────────────────────────────────────────────
@@ -753,17 +759,239 @@ function addGifts() {
   const fresh = GIFTS.filter((g) => !got.includes(g.id));
   if (!fresh.length) return [];
   fresh.forEach((g) => {
-    if (!DB.programs.some((p) => p.id === g.id)) {
+    if (g.block) addBlockGift(g);
+    else if (!DB.programs.some((p) => p.id === g.id)) {
       DB.programs.push({ id: g.id, name: g.name, accent: nextAccent(), exercises: g.exercises.map((e) => ({ ...e })) });
     }
     Object.entries(g.muscles || {}).forEach(([n, m]) => { if (!DB.muscles[n]) DB.muscles[n] = m; });
     Object.entries(g.notes || {}).forEach(([n, t]) => { if (!DB.notes[n]) DB.notes[n] = t; });
     got.push(g.id);
   });
-  persist.programs(); persist.muscles(); persist.notes();
+  persist.programs(); persist.muscles(); persist.notes(); persist.blocks();
   save(K.gifts, got);
-  return fresh.map((g) => g.name);
+  return fresh.map((g) => g.block ? `Bloc ${g.block.n} du coach` : g.name);
 }
+
+/* ── Blocs du coach ─────────────────────────────────────────
+   Un bloc = 6 à 8 semaines préparées avec Claude (skill /coach) à
+   partir du bilan du bloc d'avant. Il arrive comme un programme
+   livré, mais avec PLUSIEURS programmes (une rotation A → B → C, pas
+   des jours fixes : la fréquence change d'une semaine à l'autre).
+
+   Le plan semaine par semaine vit DANS chaque exercice
+   (`e.weeks = [{ sets, reps, cue }]`) : remplacer l'exercice garde
+   son plan. `e.isNew` = ajouté par le coach, pour essayer.
+
+   Rien n'est jamais supprimé : un bloc fini garde ses programmes,
+   rangés sous « Mes blocs ». Le compteur ne part qu'au toucher de
+   « Commencer le bloc » (`start`), pas à la livraison. */
+const WEEK = 7 * 86400000;
+
+function addBlockGift(g) {
+  if (DB.blocks.some((b) => b.id === g.id)) return;
+  const programIds = g.programs.map((p, k) => {
+    const id = `${g.id}-${p.key || k}`;
+    if (!DB.programs.some((x) => x.id === id)) {
+      DB.programs.push({ id, name: p.name, accent: nextAccent(), blockId: g.id, exercises: p.exercises.map((e) => ({ ...e })) });
+    }
+    return id;
+  });
+  DB.blocks.push({
+    id: g.id, n: g.block.n, name: g.block.name, focus: g.block.focus || "", weeks: g.block.weeks,
+    start: null, endedAt: null, programIds,
+    goals: (g.block.goals || []).map((x, k) => ({ id: `${g.id}-goal-${k}`, ...x, status: null })),
+    swaps: [], deliveredAt: Date.now(),
+  });
+}
+
+const blockById = (id) => DB.blocks.find((b) => b.id === id) || null;
+/* Les blocs pas encore remplacés, du plus récent au plus ancien :
+   d'habitude un seul, deux quand un nouveau attend d'être commencé. */
+const liveBlocks = () => DB.blocks.filter((b) => !b.endedAt).sort((a, b) => b.n - a.n);
+/* Celui qu'on suit en séance : le plus récent qui a commencé. */
+const runningBlock = () => liveBlocks().find((b) => b.start) || null;
+const blockPrograms = (b) => b.programIds.map((id) => DB.programs.find((p) => p.id === id)).filter(Boolean);
+
+/* Semaine 1…n depuis le lundi de la semaine du départ ; 0 = pas commencé. */
+function blockWeek(b) {
+  if (!b || !b.start) return 0;
+  return Math.floor((mondayOf() - mondayOf(new Date(b.start + "T00:00:00"))) / WEEK) + 1;
+}
+/* Dimanche de la dernière semaine prévue. */
+function blockPlannedEnd(b) {
+  const d = mondayOf(new Date(b.start + "T00:00:00"), b.weeks);
+  d.setDate(d.getDate() - 1);
+  return iso(d);
+}
+/* « pending » | « running » | « finished » (semaines écoulées) | « ended » (remplacé). */
+function blockState(b) {
+  if (b.endedAt) return "ended";
+  if (!b.start) return "pending";
+  return blockWeek(b) > b.weeks ? "finished" : "running";
+}
+/* Dernier jour couvert par le bilan : la fin réelle, ou aujourd'hui. */
+const blockLastDay = (b) => b.endedAt || (blockState(b) === "finished" ? blockPlannedEnd(b) : today());
+
+/* Le plan d'un exercice pour la semaine `w` ; au-delà du plan, la
+   dernière semaine prévue continue. */
+function weekPlan(e, w) {
+  if (!e || !Array.isArray(e.weeks) || !e.weeks.length || w < 1) return null;
+  return e.weeks[Math.min(w, e.weeks.length) - 1];
+}
+
+/* Commencer un bloc remplace celui d'avant : il est rangé, pas effacé. */
+function startBlock(b) {
+  DB.blocks.forEach((x) => { if (x !== b && !x.endedAt && x.start) x.endedAt = today(); });
+  b.start = today();
+  /* Un objectif « pour la fin du bloc » accepté avant le départ
+     reçoit sa date maintenant qu'elle est connue. */
+  const end = blockPlannedEnd(b);
+  DB.goals.forEach((g) => {
+    if (g.coach === b.id && !g.deadline && b.goals.some((cg) => cg.deadline === "bloc" && cg.exercise === g.exercise)) g.deadline = end;
+  });
+  persist.blocks(); persist.goals();
+}
+
+/* Un exercice retiré ou remplacé dans un programme du coach : c'est
+   ce qui lui dit quoi ne plus proposer. `to: null` = retiré. */
+function recordSwap(program, from, to) {
+  const b = program && blockById(program.blockId);
+  if (!b || from === to) return;
+  b.swaps.push({ from, to: to || null, program: program.name, date: today() });
+  persist.blocks();
+}
+
+/* Le prochain programme de la rotation : celui qui suit le dernier fait. */
+function nextInRotation(b) {
+  const ids = b.programIds;
+  const last = DB.logs.filter((l) => ids.includes(l.programId) && l.date >= (b.start || "9999"))
+    .sort((x, y) => y.createdAt - x.createdAt)[0];
+  if (!last) return ids[0];
+  return ids[(ids.indexOf(last.programId) + 1) % ids.length];
+}
+
+/* Accepter un objectif proposé le place dans les objectifs, parti
+   du niveau actuel. `deadline: "bloc"` = la fin du bloc. */
+function acceptCoachGoal(b, cg) {
+  const deadline = cg.deadline === "bloc" ? (b.start ? blockPlannedEnd(b) : null) : (cg.deadline || null);
+  DB.goals.push({
+    id: uid(), exercise: cg.exercise, metric: cg.metric, target: cg.target, weight: cg.weight || null,
+    deadline, start: goalLevel(cg.exercise, cg.metric, cg.weight) || 0, createdAt: Date.now(), doneAt: null, coach: b.id,
+  });
+  cg.status = "accepted";
+  persist.goals(); persist.blocks();
+}
+
+/* ── Bilan d'un bloc ───────────────────────────────────────
+   Tout se recalcule depuis l'historique, entre le départ et la fin. */
+function blockSummary(b) {
+  const from = b.start, to = blockLastDay(b);
+  const logs = DB.logs.filter((l) => l.date >= from && l.date <= to);
+  /* Semaines écoulées — un bloc gardé plus longtemps que prévu en a plus. */
+  const nWeeks = Math.max(1, Math.round((mondayOf(new Date(to + "T00:00:00")) - mondayOf(new Date(from + "T00:00:00"))) / WEEK) + 1);
+
+  const weeks = Array.from({ length: Math.max(b.weeks, nWeeks) }, (_, k) => {
+    const m = mondayOf(new Date(from + "T00:00:00"), k), e = new Date(m); e.setDate(e.getDate() + 7);
+    const wl = logs.filter((l) => l.date >= iso(m) && l.date < iso(e));
+    return { n: k + 1, sessions: new Set(wl.map((l) => l.date)).size, sets: wl.reduce((s, l) => s + setsOf(l), 0), future: k >= nWeeks };
+  });
+
+  /* Records : une entrée qui dépasse tout ce qui précède, PENDANT le bloc. */
+  const best = {}, records = {};
+  [...DB.logs].sort((x, y) => String(x.date).localeCompare(String(y.date)) || x.createdAt - y.createdAt).forEach((l) => {
+    if (cardioLog(l) || l.date > to) return;
+    const top = Math.max(...(l.perSet || [l]).map((s) => Number(s.weight) || 0));
+    const prev = best[l.exercise] || 0;
+    if (top <= prev) return;
+    best[l.exercise] = top;
+    if (!prev || l.date < from) return;
+    records[l.exercise] = { name: l.exercise, weight: top, prev: records[l.exercise]?.prev ?? prev };
+  });
+
+  /* Progrès par exercice : 1RM estimé de la première à la dernière séance du bloc. */
+  const byEx = {};
+  [...logs].sort((x, y) => x.createdAt - y.createdAt).forEach((l) => {
+    if (cardioLog(l)) return;
+    const v = Math.round(Math.max(...(l.perSet || [l]).map((s) => e1rm(s.weight, s.reps))));
+    if (!(v > 0)) return;
+    const x = byEx[l.exercise] || (byEx[l.exercise] = { name: l.exercise, first: v, last: v, n: 0 });
+    x.last = v; x.n++;
+  });
+  const progress = Object.values(byEx).map((x) => ({ ...x, pct: Math.round(((x.last - x.first) / x.first) * 100) }))
+    .sort((x, y) => y.pct - x.pct);
+
+  const muscles = Object.fromEntries(MUSCLES.filter((m) => m !== "Autre").map((m) => [m, 0]));
+  logs.forEach((l) => { if (!cardioLog(l)) { const m = muscleOf(l.exercise); if (m in muscles) muscles[m] += setsOf(l); } });
+
+  const planned = new Set(blockPrograms(b).flatMap((p) => p.exercises.map((e) => e.name)));
+  const done = new Set(logs.map((l) => l.exercise));
+
+  return {
+    from, to, nWeeks, weeks,
+    sessions: new Set(logs.map((l) => l.date)).size,
+    sets: logs.reduce((s, l) => s + setsOf(l), 0),
+    volume: logs.reduce((s, l) => s + volumeOf(l), 0),
+    records: Object.values(records),
+    progress,
+    /* Séries par semaine, en moyenne sur les semaines écoulées. */
+    muscles: Object.entries(muscles).map(([m, n]) => [m, Math.round((n / nWeeks) * 10) / 10]).sort((x, y) => y[1] - x[1]),
+    neverDone: [...planned].filter((n) => !done.has(n)),
+    goals: DB.goals.filter((g) => g.coach === b.id || (g.doneAt && iso(new Date(g.doneAt)) >= from && iso(new Date(g.doneAt)) <= to)),
+    bodyweight: DB.bodyweight.filter((w) => w.date >= from && w.date <= to).sort((x, y) => x.createdAt - y.createdAt),
+  };
+}
+
+/* Les exercices faits le plus souvent, toute l'histoire confondue :
+   c'est ce qu'il aime, le coach part de là. */
+function favoriteExercises(n = 30) {
+  const c = {};
+  DB.logs.forEach((l) => { c[l.exercise] = (c[l.exercise] || 0) + 1; });
+  return Object.entries(c).sort((x, y) => y[1] - x[1]).slice(0, n)
+    .map(([name, times]) => ({ name, times, muscle: muscleOf(name), cardio: isCardio(name), best: DB.prs[name] || null }));
+}
+
+/* Ce qui part chez le coach. Un bilan de bloc, ou — sans bloc —
+   tout, pour préparer le premier. */
+function coachPayload(b) {
+  const base = {
+    app: "reps", kind: b ? "coach-bilan" : "coach-start", version: 1, exportedAt: new Date().toISOString(),
+    favorites: favoriteExercises(),
+    goals: DB.goals,
+    blocks: DB.blocks.map(({ id, n, name, focus, weeks, start, endedAt, swaps }) => ({ id, n, name, focus, weeks, start, endedAt, swaps })),
+    notes: DB.notes, muscles: DB.muscles,
+    bodyweight: [...DB.bodyweight].sort((x, y) => x.createdAt - y.createdAt).slice(-30),
+  };
+  if (!b) return { ...base, programs: DB.programs, logs: DB.logs, journal: DB.journal };
+  const s = blockSummary(b);
+  return {
+    ...base,
+    block: { ...b, week: blockWeek(b), state: blockState(b) },
+    summary: s,
+    programs: blockPrograms(b),
+    otherPrograms: DB.programs.filter((p) => !p.blockId).map((p) => ({ name: p.name, exercises: p.exercises.map((e) => e.name) })),
+    logs: DB.logs.filter((l) => l.date >= s.from && l.date <= s.to),
+    journal: DB.journal.filter((j) => j.date >= s.from && j.date <= s.to),
+  };
+}
+
+/* Partage (feuille iOS : Mail, OneDrive, AirDrop…) ; sinon téléchargement. */
+async function shareJSON(filename, payload) {
+  const text = JSON.stringify(payload, null, 2);
+  try {
+    const file = new File([text], filename, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Pour le coach" });
+      return "shared";
+    }
+  } catch (e) { if (e && e.name === "AbortError") return "cancel"; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return "saved";
+}
+const sendToCoach = (b) => shareJSON(`coach-${b ? `bilan-bloc${b.n}` : "depart"}-${today()}.json`, coachPayload(b));
 
 /* ── Sauvegarde manuelle ──────────────────────────────────── */
 function exportJSON() {
@@ -784,7 +1012,7 @@ function importJSON(file, done) {
       const p = JSON.parse(r.result);
       const d = p.data || p;
       if (!d || typeof d !== "object") throw new Error("format");
-      ["programs", "logs", "bodyweight", "sessions", "journal", "goals"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
+      ["programs", "logs", "bodyweight", "sessions", "journal", "goals", "blocks"].forEach((k) => { if (Array.isArray(d[k])) DB[k] = d[k]; });
       ["notes", "prs", "muscles", "links"].forEach((k) => { if (d[k] && typeof d[k] === "object") DB[k] = d[k]; });
       Object.values(persist).forEach((f) => f());
       done(null);

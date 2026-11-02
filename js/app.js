@@ -205,6 +205,9 @@ function initApp() {
     });
   });
   $("manage-ex-btn").addEventListener("click", manageExercisesSheet);
+  $("coach-blocks-btn").addEventListener("click", () => blocksPage());
+  /* Le bloc en cours s'il y en a un (son bilan), sinon tout. */
+  $("coach-send-btn").addEventListener("click", () => coachSend(runningBlock()));
   $("wipe-btn").addEventListener("click", () => {
     confirmSheet("Tout effacer ?", "Programmes, historique, pesées et records seront supprimés de cet appareil. Ton ancienne app n'est pas touchée.", "Tout effacer", () => {
       /* `wt2-gifts` reste : sinon un programme livré reviendrait. */

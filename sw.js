@@ -7,7 +7,7 @@
 
    Bumper la VERSION à CHAQUE déploiement, sinon le téléphone continue
    de servir la version précédente. */
-const VERSION = "v30";
+const VERSION = "v31";
 const SCOPE = new URL("./", self.location).pathname;   // ex. "/reps/"
 const CACHE_NAME = `workouts-${VERSION}${SCOPE}`;
 

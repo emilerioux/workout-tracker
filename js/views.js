@@ -694,9 +694,286 @@ function badgesSheet() {
   );
 }
 
+/* ══ Bloc du coach ══════════════════════════════════════════
+   La carte du haut dit où on en est (semaine N sur M), propose les
+   objectifs du coach et, à la fin, invite à lui envoyer le bilan.
+   Les blocs passés vivent sous « Mes blocs », jamais effacés. */
+const MOIS_ABR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const shortDay = (s) => { const d = new Date(s + "T00:00:00"); return `${d.getDate()} ${MOIS_ABR[d.getMonth()]}`; };
+const blockDates = (b) => b.start ? `${shortDay(b.start)} – ${shortDay(b.endedAt || blockPlannedEnd(b))}` : "pas encore commencé";
+const BLOCK_STATE = { pending: "à commencer", running: "en cours", finished: "terminé", ended: "terminé" };
+
+/* « Bloc 2 · semaine 4 sur 6 » */
+function blockTitle(b) {
+  const st = blockState(b);
+  return st === "running" ? `Bloc ${b.n} · semaine ${blockWeek(b)} sur ${b.weeks}` : `Bloc ${b.n} · ${BLOCK_STATE[st]}`;
+}
+
+/* Une case par semaine, une seule couleur : faites, celle-ci, à venir. */
+function weekBar(b) {
+  const w = b.endedAt ? b.weeks + 1 : blockWeek(b);
+  return `<span class="bk-weeks" aria-hidden="true">${Array.from({ length: b.weeks }, (_, k) =>
+    `<i class="${k + 1 < w ? "on" : k + 1 === w ? "now" : ""}"></i>`).join("")}</span>`;
+}
+
+/* Le plan d'un programme du coach, en une ligne : « 3 × 10 → 4 × 6 sur 6 sem. » */
+const planSpan = (weeks) => {
+  const a = weeks[0], z = weeks[weeks.length - 1], t = (x) => `${x.sets} × ${esc(x.reps)}`;
+  return `${t(a)}${t(a) !== t(z) ? ` → ${t(z)}` : ""} sur ${weeks.length} sem.`;
+};
+
+function renderBlock() {
+  const host = $("block-card");
+  const live = liveBlocks();
+  /* Un nouveau bloc qui attend passe devant : c'est lui la prochaine étape. */
+  const b = live.find((x) => !x.start) || live[0];
+  if (!b) { host.innerHTML = ""; return; }
+  const st = blockState(b), cur = runningBlock();
+  const proposed = b.goals.filter((g) => !g.status);
+  const nextP = st !== "pending" && DB.programs.find((p) => p.id === nextInRotation(b));
+  const doneN = st !== "pending" ? blockSummary(b).sessions : 0;
+
+  const body = {
+    pending: `<p class="bk-meta">${b.weeks} semaines · ${b.programIds.length} programme${b.programIds.length > 1 ? "s" : ""} en rotation${cur ? ` · remplace le bloc ${cur.n}` : ""}</p>`,
+    running: `${weekBar(b)}
+      ${nextP ? `<button type="button" class="bk-next" data-prog="${esc(nextP.id)}">
+         <span class="row-stripe" style="background:${stripeOf(nextP)}"></span>
+         <span><em>Prochaine séance</em><b>${esc(nextP.name)}</b></span>
+         <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>` : ""}
+      <p class="bk-meta">${doneN} séance${doneN > 1 ? "s" : ""} depuis le ${shortDay(b.start)} · fin le ${shortDay(blockPlannedEnd(b))}</p>`,
+    finished: `${weekBar(b)}
+      <p class="bk-meta">Envoie ton bilan au coach pour préparer le bloc ${b.n + 1}. D'ici là, continue celui-ci.</p>`,
+  }[st];
+
+  const actions = {
+    pending: `<button type="button" class="nudge-yes" id="bk-start">Commencer le bloc</button>
+              <button type="button" class="nudge-no" id="bk-see">Voir les programmes</button>`,
+    running: `<button type="button" class="nudge-no" id="bk-bilan">Bilan jusqu'ici</button>`,
+    finished: `<button type="button" class="nudge-yes" id="bk-send">Envoyer au coach</button>
+               <button type="button" class="nudge-no" id="bk-bilan">Voir le bilan</button>`,
+  }[st];
+
+  host.innerHTML =
+    `<section class="card-surface bk-card${st === "finished" ? " done" : ""}" aria-label="Bloc du coach">
+       <p class="bk-k">${st === "pending" ? "Nouveau bloc du coach" : esc(blockTitle(b))}</p>
+       <h3 class="bk-t">${st === "pending" ? `Bloc ${b.n} · ` : ""}${esc(b.name)}</h3>
+       ${b.focus ? `<p class="bk-focus">${esc(b.focus)}</p>` : ""}
+       ${body}
+       ${proposed.length ? `<div class="bk-goals">
+         <p class="bk-sub">Objectifs proposés</p>
+         ${proposed.map((g) => `<div class="bk-goal">
+            <span class="bk-goal-t"><b>${esc(g.exercise)} · ${esc(goalLabel(g))}</b>${g.why ? `<em>${esc(g.why)}</em>` : ""}</span>
+            <span class="bk-goal-act">
+              <button type="button" class="nudge-yes" data-acc="${esc(g.id)}">Accepter</button>
+              <button type="button" class="nudge-no" data-dis="${esc(g.id)}">Non merci</button></span>
+          </div>`).join("")}</div>` : ""}
+       <div class="backup-act">${actions}</div>
+     </section>`;
+
+  const on = (id, f) => { if ($(id)) $(id).addEventListener("click", f); };
+  on("bk-start", () => askStartBlock(b));
+  on("bk-see", () => blocksPage());
+  on("bk-bilan", () => blockSheet(b));
+  on("bk-send", () => coachSend(b));
+  host.querySelectorAll("[data-prog]").forEach((x) => x.addEventListener("click", () => showProgram(x.dataset.prog)));
+  host.querySelectorAll("[data-acc], [data-dis]").forEach((x) => x.addEventListener("click", () => {
+    const g = b.goals.find((y) => y.id === (x.dataset.acc || x.dataset.dis));
+    if (!g) return;
+    if (x.dataset.acc) { acceptCoachGoal(b, g); buzz(9); toast("Objectif ajouté — let's go"); }
+    else { g.status = "dismissed"; persist.blocks(); buzz(6); toast("Pas retenu"); }
+    renderBlock(); renderGoals();
+  }));
+}
+
+/* Commencer un bloc range celui d'avant : on le dit avant de le faire. */
+function askStartBlock(b) {
+  const cur = runningBlock();
+  const go = () => {
+    startBlock(b);
+    renderPrograms();
+    buzz([10, 40, 18]);
+    toast(`Bloc ${b.n} commencé — semaine 1`);
+  };
+  if (!cur || cur === b) { go(); return; }
+  openSheet(
+    `<p class="sheet-kicker">Bloc ${b.n}</p>
+     <h2 class="sheet-h">Commencer ${esc(b.name)} ?</h2>
+     <p class="muted">Le bloc ${cur.n} (${esc(cur.name)}) sera rangé dans Mes blocs, avec ses programmes et son bilan. Rien n'est effacé.</p>
+     <button class="primary sheet-cta" id="bs-yes"><span class="primary-label">Commencer le bloc ${b.n}</span></button>
+     <button class="ghost-btn" id="bs-no">Pas tout de suite</button>`
+  );
+  $("bs-yes").addEventListener("click", () => { closeSheet(); onSheetClose = go; });
+  $("bs-no").addEventListener("click", () => closeSheet());
+}
+
+async function coachSend(b) {
+  const r = await sendToCoach(b);
+  if (r === "cancel") return;
+  buzz(9);
+  toast(r === "shared" ? "Envoyé — dis « /coach » à Claude" : "Fichier enregistré — donne-le à Claude avec « /coach »");
+}
+
+/* ── Bilan d'un bloc ─────────────────────────────────────── */
+function blockSheet(b) {
+  if (!b.start) { blocksPage(); return; }
+  const s = blockSummary(b), st = blockState(b);
+  const rows = (items) => `<ul class="month-list">${items.join("")}</ul>`;
+  const maxS = Math.max(4, ...s.weeks.map((w) => w.sessions));
+  const ups = s.progress.filter((x) => x.n >= 2 && x.pct > 0).slice(0, 5);
+  const flat = s.progress.filter((x) => x.n >= 3 && x.pct <= 0);
+  const goalRow = (g) => {
+    const { cur } = goalProgress(g);
+    return `<li><span>${esc(g.exercise)}</span><span class="tnum">${g.doneAt ? `<b>${esc(goalLabel(g))}</b> ✓` : `<i>${fmt(cur)} /</i> <b>${esc(goalLabel(g))}</b>`}</span></li>`;
+  };
+  const low = s.muscles.filter(([, n]) => n < 4);
+
+  openSheet(
+    `<p class="sheet-kicker">Bilan · Bloc ${b.n}</p>
+     <h2 class="sheet-h">${esc(b.name)}</h2>
+     <p class="muted">${esc(blockDates(b))} · ${st === "running" ? `semaine ${blockWeek(b)} sur ${b.weeks}` : `${s.nWeeks} semaines`}</p>
+     <div class="stat-row month-stats">
+       ${statTile(s.sessions, `Séance${s.sessions > 1 ? "s" : ""}`)}
+       ${statTile(s.sets, "Séries")}
+       ${statTile(volumeText(s.volume), "Volume (lb)")}
+     </div>
+
+     <p class="block-key">Régularité</p>
+     <div class="mbars">${s.weeks.map((w) => `
+       <div class="mbar static${w.sessions ? "" : " zero"}">
+         <span class="mbar-name">Semaine ${w.n}</span>
+         <span class="mbar-track"><span class="mbar-fill" style="width:${Math.round((w.sessions / maxS) * 100)}%"></span></span>
+         <span class="mbar-val"><b class="tnum">${w.future ? "–" : w.sessions}</b><i>${w.future ? "à venir" : `séance${w.sessions > 1 ? "s" : ""}`}</i></span>
+       </div>`).join("")}</div>
+
+     ${s.goals.length ? `<p class="block-key">Objectifs</p>${rows(s.goals.map(goalRow))}` : ""}
+     ${s.records.length ? `<p class="block-key">Records battus</p>${rows(s.records.map((r) =>
+       `<li><span>${esc(r.name)}</span><span class="tnum"><i>${fmt(r.prev)} →</i> <b>${fmt(r.weight)} lb</b></span></li>`))}` : ""}
+     ${ups.length ? `<p class="block-key">Plus gros progrès · 1RM estimé</p>${rows(ups.map((x) =>
+       `<li><span>${esc(x.name)}</span><span class="tnum"><i>${x.first} →</i> <b>${x.last} lb</b> <i>+${x.pct} %</i></span></li>`))}` : ""}
+     ${flat.length ? `<p class="block-key">Qui stagnent</p>${rows(flat.map((x) =>
+       `<li><span>${esc(x.name)}</span><span class="tnum"><b>${x.last} lb</b> <i>${x.n} séances</i></span></li>`))}` : ""}
+     <p class="block-key">Séries par muscle · par semaine</p>
+     ${rows(s.muscles.map(([m, n]) => `<li><span>${esc(m)}</span><span class="tnum">${n < 4 ? "<i>peu ·</i> " : ""}<b>${fmt(n)}</b></span></li>`))}
+     ${b.swaps.length ? `<p class="block-key">Exercices changés</p>${rows(b.swaps.map((x) =>
+       `<li><span>${esc(x.from)}</span><span class="tnum">${x.to ? `<i>→</i> <b>${esc(x.to)}</b>` : "<i>retiré</i>"}</span></li>`))}` : ""}
+     ${s.neverDone.length && st !== "running" ? `<p class="block-key">Jamais fait pendant le bloc</p>${rows(s.neverDone.map((n) => `<li><span>${esc(n)}</span></li>`))}` : ""}
+
+     <p class="block-key">Programmes du bloc</p>
+     <div class="bk-progs">${blockPrograms(b).map((p) => bkProgRow(p)).join("")}</div>
+
+     <button class="primary sheet-cta bk-send" id="bks-send"><span class="primary-label">Envoyer au coach</span></button>
+     <p class="fineprint">Un fichier part par la feuille de partage (courriel, OneDrive…). Donne-le à Claude en lui disant « /coach » : il prépare le bloc suivant à partir de ce bilan${low.length ? `, et de tes muscles peu travaillés (${low.map(([m]) => m.toLowerCase()).join(", ")})` : ""}.</p>`
+  );
+  $("bks-send").addEventListener("click", () => coachSend(b));
+  bindBkProgs($("sheet-body"), () => { closeSheet(); });
+}
+
+/* Une rangée de programme dans un bloc. */
+const bkProgRow = (p) => `<button type="button" class="bk-prog" data-prog="${esc(p.id)}">
+    <span class="row-stripe" style="background:${stripeOf(p)}"></span>
+    <span class="bk-prog-t"><b>${esc(p.name)}</b><em>${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""}${p.exercises.some((e) => e.isNew) ? ` · ${p.exercises.filter((e) => e.isNew).length} nouveau${p.exercises.filter((e) => e.isNew).length > 1 ? "x" : ""}` : ""}</em></span>
+    <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+  </button>`;
+/* Ouvrir un programme depuis une feuille ou Mes blocs : on referme
+   d'abord ce qui est ouvert, puis la fiche programme glisse. */
+function bindBkProgs(host, close) {
+  host.querySelectorAll(".bk-prog").forEach((x) => x.addEventListener("click", () => {
+    const id = x.dataset.prog;
+    buzz(6);
+    close();
+    setTimeout(() => showProgram(id), 240);
+  }));
+}
+
+/* ── Mes blocs ───────────────────────────────────────────── */
+function renderBlocksRow() {
+  const host = $("blocks-row");
+  if (!DB.blocks.length && !DB.logs.length) { host.innerHTML = ""; return; }
+  const live = liveBlocks()[0];
+  const done = DB.blocks.filter((b) => b.endedAt).length;
+  host.innerHTML =
+    `<button type="button" class="card-surface badges-row" id="blocks-open">
+       <span class="badges-count"><b class="tnum">${DB.blocks.length}</b><i>bloc${DB.blocks.length > 1 ? "s" : ""}</i></span>
+       <span class="badges-txt"><b>Mes blocs</b>
+         <em>${DB.blocks.length
+           ? [live ? `Bloc ${live.n} ${BLOCK_STATE[blockState(live)]}` : null, done ? `${done} terminé${done > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ")
+           : "Envoie tes données au coach pour recevoir ton premier bloc"}</em></span>
+       <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+     </button>`;
+  $("blocks-open").addEventListener("click", () => blocksPage());
+}
+
+function blocksPage() {
+  const list = [...DB.blocks].sort((a, b) => b.n - a.n);
+  const item = (b) => {
+    const st = blockState(b);
+    const s = b.start ? blockSummary(b) : null;
+    return `<section class="card-surface bk-item${st === "running" ? " live" : ""}">
+        <header class="bk-item-head"><span class="bk-k">Bloc ${b.n} · ${BLOCK_STATE[st]}</span><span class="week-range">${esc(blockDates(b))}</span></header>
+        <h3 class="bk-t">${esc(b.name)}</h3>
+        ${b.focus ? `<p class="bk-focus">${esc(b.focus)}</p>` : ""}
+        ${b.start ? weekBar(b) : ""}
+        <p class="bk-meta">${b.weeks} semaines${s ? ` · ${s.sessions} séance${s.sessions > 1 ? "s" : ""}` : ""}${s && s.records.length ? ` · ${s.records.length} record${s.records.length > 1 ? "s" : ""}` : ""}${b.swaps.length ? ` · ${b.swaps.length} changement${b.swaps.length > 1 ? "s" : ""}` : ""}</p>
+        <div class="bk-progs">${blockPrograms(b).map((p) => bkProgRow(p)).join("")}</div>
+        ${b.start
+          ? `<button type="button" class="ghost-btn" data-bilan="${esc(b.id)}">${st === "running" ? "Bilan jusqu'ici" : "Voir le bilan"}</button>`
+          : `<button type="button" class="primary compact bk-go" data-start="${esc(b.id)}"><span class="primary-label">Commencer le bloc</span></button>`}
+      </section>`;
+  };
+
+  pushView(
+    `<header class="pushed-bar">
+       <button class="icon-btn" data-back aria-label="Retour">
+         <svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>
+       </button>
+       <span class="pushed-title">Mes blocs</span>
+       <span class="icon-btn ghost-slot"></span>
+     </header>
+     <div class="pushed-scroll">
+       <h1 class="big-title">Mes blocs</h1>
+       <p class="big-sub">Chaque bloc de 6 à 8 semaines préparé par ton coach, avec ses programmes et son bilan.</p>
+       ${list.length ? list.map(item).join("") : `<div class="empty"><p class="empty-title">Pas encore de bloc</p>
+         <p class="empty-body">Envoie tes données au coach : il part des exercices que tu fais déjà, en ajoute quelques-uns, et vise tes objectifs.</p></div>`}
+       <div class="card-surface block coach-how">
+         <h3>Comment ça marche</h3>
+         <ol class="how-list">
+           <li>Tu suis le bloc : chaque exercice affiche la cible de la semaine.</li>
+           <li>Un exercice ne te plaît pas ? Remplace-le — le plan suit, et le coach s'en souvient.</li>
+           <li>À la fin, tu envoies le bilan. Le bloc suivant arrive dans l'app.</li>
+         </ol>
+         <button type="button" class="ghost-btn" id="coach-all">${list.length ? "Envoyer toutes mes données au coach" : "Envoyer mes données au coach"}</button>
+       </div>
+     </div>`
+  );
+  const host = $("pushed");
+  bindBkProgs(host, () => popView());
+  host.querySelectorAll("[data-bilan]").forEach((x) => x.addEventListener("click", () => blockSheet(blockById(x.dataset.bilan))));
+  host.querySelectorAll("[data-start]").forEach((x) => x.addEventListener("click", () => {
+    const b = blockById(x.dataset.start);
+    popView();
+    setTimeout(() => askStartBlock(b), 240);
+  }));
+  $("coach-all").addEventListener("click", () => coachSend(null));
+}
+
+function progCard(p, next) {
+  const last = DB.logs.filter((l) => l.programId === p.id).sort((a, b) => b.createdAt - a.createdAt)[0];
+  const when = last ? relDay(last.date) : "jamais fait";
+  return `<button type="button" class="prog-card" data-id="${esc(p.id)}">
+      <span class="prog-stripe" style="background:${stripeOf(p)}"></span>
+      <span class="prog-body">
+        <span class="prog-name">${esc(p.name)}${next ? `<span class="prog-next">Prochaine</span>` : ""}</span>
+        <span class="prog-meta">${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""} · ${esc(when)}</span>
+      </span>
+      <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </button>`;
+}
+
 function renderPrograms() {
   renderWeek();
   renderBackup();
+  renderBlock();
+  renderBlocksRow();
   renderGoals();
   renderMonth();
   renderBadges();
@@ -706,27 +983,28 @@ function renderPrograms() {
     ? (n > 1 ? `${n} semaines d'entraînement d'affilée.` : "Choisis un programme et lance-toi.")
     : "";
 
-  if (!DB.programs.length) {
+  /* Les blocs encore actifs d'abord, chacun sous son titre ; puis les
+     programmes à soi. Ceux d'un bloc terminé vivent dans Mes blocs. */
+  const sections = liveBlocks().map((b) => ({
+    title: blockTitle(b), progs: blockPrograms(b),
+    next: b.start ? nextInRotation(b) : null,
+  })).filter((s) => s.progs.length);
+  const others = DB.programs.filter((p) => !p.blockId || !blockById(p.blockId));
+  if (others.length) sections.push({ title: sections.length ? "Autres programmes" : null, progs: others, next: null });
+
+  if (!sections.length) {
     host.innerHTML =
       `<div class="empty">
          <p class="empty-title">Rien ici pour l'instant</p>
-         <p class="empty-body">Crée ton premier programme, ou récupère ceux de ton ancienne app depuis les Réglages.</p>
+         <p class="empty-body">${DB.programs.length
+           ? "Tes programmes sont rangés dans Mes blocs. Crée-en un nouveau, ou attends le prochain bloc du coach."
+           : "Crée ton premier programme, ou récupère ceux de ton ancienne app depuis les Réglages."}</p>
        </div>`;
     return;
   }
 
-  host.innerHTML = DB.programs.map((p) => {
-    const last = DB.logs.filter((l) => l.programId === p.id).sort((a, b) => b.createdAt - a.createdAt)[0];
-    const when = last ? relDay(last.date) : "jamais fait";
-    return `<button type="button" class="prog-card" data-id="${esc(p.id)}">
-        <span class="prog-stripe" style="background:${stripeOf(p)}"></span>
-        <span class="prog-body">
-          <span class="prog-name">${esc(p.name)}</span>
-          <span class="prog-meta">${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""} · ${esc(when)}</span>
-        </span>
-        <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-      </button>`;
-  }).join("");
+  host.innerHTML = sections.map((s) =>
+    `${s.title ? `<p class="prog-sec">${esc(s.title)}</p>` : ""}${s.progs.map((p) => progCard(p, p.id === s.next)).join("")}`).join("");
 
   host.querySelectorAll(".prog-card").forEach((b) => {
     b.addEventListener("pointerdown", () => b.classList.add("pressed"));
@@ -751,13 +1029,13 @@ function relDay(dateStr) {
 /* Une rangée d'exercice de la fiche programme. Extraite parce que
    les exercices d'un superset la réutilisent telle quelle, à
    l'intérieur de leur encadré. */
-function exRow(e, badge, stripe) {
-  const sub = exSub(e);
+function exRow(e, badge, stripe, w = 0) {
+  const sub = exPlanSub(e, w);
   return `<li class="ex-row${badge.superset ? " ss" : ""}">
       <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
       <span class="ex-num">${badge.superset ? `<b>${badge.text}</b>` : badge.text}</span>
       <span class="ex-main">
-        <span class="ex-title">${esc(e.name)}</span>
+        <span class="ex-title">${esc(e.name)}${e.isNew ? `<span class="new-pill">Nouveau</span>` : ""}</span>
         <span class="ex-sub">${sub}</span>
       </span>
       <span class="ex-best">${e.kind !== "cardio" && DB.prs[e.name] ?`${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
@@ -798,6 +1076,9 @@ function showProgram(id) {
   const [c1, c2] = accentOf(p);
   const stripe = stripeOf(p);
   const badges = supersetLabels(p.exercises);
+  const blk = p.blockId ? blockById(p.blockId) : null;
+  /* Dans un bloc en cours, chaque exercice dit sa cible de la semaine. */
+  const w = blk && blk.start && !blk.endedAt ? blockWeek(blk) : 0;
 
   pushView(
     `<header class="pushed-bar">
@@ -811,12 +1092,13 @@ function showProgram(id) {
      </header>
      <div class="pushed-scroll">
        <div class="prog-hero ink-${heroInk([c1, c2])}" style="background:linear-gradient(160deg,${c1},${c2})">
+         ${blk ? `<p class="hero-k">${esc(blockTitle(blk))}</p>` : ""}
          <h1>${esc(p.name)}</h1>
          <p>${heroMeta(p)}</p>
        </div>
        <ol class="ex-list">
          ${supersetRuns(p.exercises).map((run) => {
-           const rows = run.map((i) => exRow(p.exercises[i], badges[i], stripe)).join("");
+           const rows = run.map((i) => exRow(p.exercises[i], badges[i], stripe, w)).join("");
            if (run.length < 2) return rows;
            const tours = Math.max(...run.map((i) => p.exercises[i].sets || 0));
            return `<li class="ss-group">
@@ -847,7 +1129,8 @@ function showProgram(id) {
       id: uid(),
       name: `${p.name} (copie)`,
       accent: nextAccent(),
-      exercises: p.exercises.map((e) => ({ ...e })),
+      /* La copie est à soi : sans le plan ni les pastilles du coach. */
+      exercises: p.exercises.map(({ weeks, isNew, ...e }) => ({ ...e })),
     };
     DB.programs.splice(DB.programs.indexOf(p) + 1, 0, copy);
     persist.programs();
@@ -898,9 +1181,13 @@ const LINK_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h2a5
 
 /* ── Éditeur de programme ─────────────────────────────────── */
 function editProgram(existing) {
+  /* `...existing` garde `blockId` : un programme du coach reste dans son bloc. */
   const draft = existing
-    ? { id: existing.id, name: existing.name, accent: existing.accent ?? 0, exercises: existing.exercises.map((e) => ({ ...e })) }
+    ? { ...existing, accent: existing.accent ?? 0, exercises: existing.exercises.map((e) => ({ ...e })) }
     : { id: uid(), name: "", accent: nextAccent(), exercises: [] };
+  /* Remplacé ou retiré dans un programme du coach : noté à
+     l'enregistrement, pour qu'il ne le repropose pas. */
+  const swaps = [];
 
   /* Les couleurs portées par les AUTRES programmes s'affichent en
      retrait : rien n'empêche de les reprendre, mais on le voit. */
@@ -964,8 +1251,8 @@ function editProgram(existing) {
           <span class="row-stripe" style="background:${stripeOf(draft)}" aria-hidden="true"></span>
           <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
           <span class="ex-main">
-            <span class="ex-title">${esc(e.name)}</span>
-            <span class="ex-sub">${exSub(e)}</span>
+            <span class="ex-title">${esc(e.name)}${e.isNew ? `<span class="new-pill">Nouveau</span>` : ""}</span>
+            <span class="ex-sub">${exPlanSub(e)}</span>
           </span>
           ${i === 0 || e.kind === "cardio" || draft.exercises[i - 1].kind === "cardio"
             ? `<span class="link-btn spacer" aria-hidden="true"></span>`
@@ -988,6 +1275,7 @@ function editProgram(existing) {
 
     host.querySelectorAll(".swipe-row").forEach((row) => {
       swipeToReveal(row, { onCommit: () => {
+        swaps.push([draft.exercises[Number(row.dataset.i)].name, null]);
         draft.exercises.splice(Number(row.dataset.i), 1);
         drawDraft();
       } });
@@ -1003,12 +1291,20 @@ function editProgram(existing) {
           edit: cur,
           programName: $("pname").value.trim() || null,
           onAdd: (ex) => {
-            /* Le groupe (superset) et la place ne bougent pas. */
-            draft.exercises[i] = { ...ex, group: cur.group };
+            /* Le groupe (superset) et la place ne bougent pas. Le plan
+               du coach suit un exercice remplacé ; il ne cède que si
+               on change soi-même les séries ou les reps. */
+            const next = { ...ex, group: cur.group };
+            const numbers = String(ex.sets ?? "") !== String(cur.sets ?? "") || String(ex.reps ?? "") !== String(cur.reps ?? "");
+            if (cur.weeks && !numbers) next.weeks = cur.weeks;
+            if (cur.isNew && ex.name === cur.name) next.isNew = true;
+            if (ex.name !== cur.name) swaps.push([cur.name, ex.name]);
+            draft.exercises[i] = next;
             drawDraft();
           },
           /* Même effet que le glissé vers la gauche, en visible. */
           onRemove: () => {
+            swaps.push([cur.name, null]);
             draft.exercises.splice(i, 1);
             drawDraft();
           },
@@ -1067,6 +1363,7 @@ function editProgram(existing) {
     const i = DB.programs.findIndex((p) => p.id === draft.id);
     if (i >= 0) DB.programs[i] = draft; else DB.programs.push(draft);
     persist.programs();
+    swaps.forEach(([from, to]) => recordSwap(draft, from, to));
     popView(0, true);
     renderPrograms();
     toast(existing ? "Programme mis à jour" : "Programme créé");
@@ -1077,6 +1374,14 @@ function editProgram(existing) {
 const exSub = (e) => e.kind === "cardio"
   ? ["Cardio", e.minutes ? `${fmt(e.minutes)} min` : null].filter(Boolean).join(" · ")
   : [e.sets ? `${e.sets} séries` : null, e.reps ? `${esc(e.reps)} reps` : null].filter(Boolean).join(" · ") || "libre";
+
+/* Avec un plan du coach : la cible de la semaine `w` du bloc, ou
+   tout le plan d'un coup quand le bloc n'a pas commencé (éditeur). */
+function exPlanSub(e, w = 0) {
+  if (!Array.isArray(e.weeks) || !e.weeks.length) return exSub(e);
+  const p = weekPlan(e, w);
+  return p ? `Semaine ${w} : ${p.sets} séries · ${esc(p.reps)} reps` : `Plan du coach · ${planSpan(e.weeks)}`;
+}
 
 /* Ajouter un exercice — depuis l'éditeur de programme OU en pleine
    séance. `ctx` : { prev, session, onAdd(ex, { superset, keep }) }.
@@ -1110,6 +1415,7 @@ function addExerciseSheet(ctx, picked = "", kind = null) {
        ${stepperRow("ex-sets", lf ? lf.sets : 3, { label: "Séries", placeholder: "3" })}
        ${stepperRow("ex-reps", lf ? lf.reps : "", { label: "Reps", sub: "Ou une fourchette", kind: "range", placeholder: "8-10" })}
        ${prev && prev.kind !== "cardio" && !ctx.session && !ed ? `<label class="check-row"><input type="checkbox" id="ex-ss"><span>Superset avec « ${esc(prev.name)} »</span></label>` : ""}
+       ${ed && Array.isArray(ed.weeks) && ed.weeks.length ? `<p class="fineprint fx-plan">Plan du coach : ${planSpan(ed.weeks)} Changer l'exercice garde ce plan ; changer les séries ou les reps le remplace par tes chiffres.</p>` : ""}
      </div>
      <div data-for="cardio" ${kind === "cardio" ? "" : "hidden"}>
        ${stepperRow("ex-min", lc ? lc.minutes : "", { label: "Durée visée", sub: "Facultative", unit: "min", placeholder: "20" })}

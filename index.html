@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -28,8 +28,10 @@
         <h1 class="big-title">Programmes</h1>
         <p class="big-sub" id="prog-sub"></p>
         <div id="backup-card"></div>
+        <div id="block-card"></div>
         <div id="week-card"></div>
         <div id="program-list" class="prog-list"></div>
+        <div id="blocks-row"></div>
         <div class="tile-pair">
           <button class="tile-btn" id="new-program-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -189,6 +191,13 @@
         </div>
 
         <div class="card-surface block">
+          <h3>Coach</h3>
+          <p class="muted">Tous les 6 à 8 semaines, Claude prépare un nouveau bloc à partir de tes séances et de tes objectifs. Envoie-lui tes données, puis dis-lui « /coach ».</p>
+          <button class="ghost-btn" id="coach-blocks-btn">Mes blocs</button>
+          <button class="ghost-btn" id="coach-send-btn">Envoyer mes données au coach</button>
+        </div>
+
+        <div class="card-surface block">
           <h3>Exercices</h3>
           <p class="muted">Renomme un exercice — il se met à jour dans l'historique, les programmes et les records. Ajoute une note technique si tu veux.</p>
           <button class="ghost-btn" id="manage-ex-btn">Gérer mes exercices</button>
@@ -326,14 +335,14 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=30"></script>
-<script src="js/motion.js?v=30"></script>
-<script src="js/data.js?v=30"></script>
-<script src="js/chart.js?v=30"></script>
-<script src="js/fiche.js?v=30"></script>
-<script src="js/session.js?v=30"></script>
-<script src="js/views.js?v=30"></script>
-<script src="js/app.js?v=30"></script>
+<script src="js/theme.js?v=31"></script>
+<script src="js/motion.js?v=31"></script>
+<script src="js/data.js?v=31"></script>
+<script src="js/chart.js?v=31"></script>
+<script src="js/fiche.js?v=31"></script>
+<script src="js/session.js?v=31"></script>
+<script src="js/views.js?v=31"></script>
+<script src="js/app.js?v=31"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

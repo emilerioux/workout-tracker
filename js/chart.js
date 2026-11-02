@@ -35,6 +35,34 @@ function niceScale(min, max, ticks = 4) {
   return { lo, hi, ticks: out };
 }
 
+/* Courbe lisse MONOTONE (Fritsch–Carlson, comme d3.curveMonotoneX) :
+   arrondie, mais elle ne dépasse jamais un point — pas de faux pic
+   au-dessus d'un record, pas de creux inventé entre deux séances. */
+function smoothPath(P) {
+  const n = P.length;
+  if (n < 3) return P.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const dx = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = (P[i + 1][0] - P[i][0]) || 1e-6;
+    m[i] = (P[i + 1][1] - P[i][1]) / dx[i];
+  }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    t[i] = m[i - 1] * m[i] <= 0 ? 0
+      : (3 * (dx[i - 1] + dx[i])) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]);
+  }
+  let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = P[i], [x1, y1] = P[i + 1], h = dx[i] / 3;
+    d += ` C${(x0 + h).toFixed(1)},${(y0 + t[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)},${(y1 - t[i + 1] * h).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+  }
+  return d;
+}
+
+/* Le tracé se dessine à l'apparition — une fois par série, pas à
+   chaque redimensionnement — et jamais avec « réduire les animations ». */
+const drawnSigs = new WeakMap();
+
 /* points: [{x: ms, y: number, date, log}] triés, croissants en x
    opts: { unit, color, prSet: Set(x), empty } */
 function renderChart(host, points, opts = {}) {
@@ -65,12 +93,15 @@ function renderChart(host, points, opts = {}) {
     return;
   }
 
-  const W = Math.max(260, host.clientWidth || 320), H = 208;
-  const M = { t: 16, r: 16, b: 26, l: 40 };
+  const W = Math.max(260, host.clientWidth || 320), H = 228;
+  const M = { t: 30, r: 14, b: 26, l: 40 };
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
 
+  /* Un peu d'air au-dessus et au-dessous : un point collé au bord du
+     cadre se lit comme coupé, et la courbe paraît écrasée. */
   const ys = points.map((p) => p.y);
-  const sc = niceScale(Math.min(...ys), Math.max(...ys));
+  const yMin = Math.min(...ys), yMax = Math.max(...ys), pad = (yMax - yMin) * 0.12;
+  const sc = niceScale(Math.max(0, yMin - pad), yMax + pad);
   const x0 = points[0].x, x1 = points[points.length - 1].x;
   const sx = (v) => M.l + (x1 === x0 ? iw / 2 : ((v - x0) / (x1 - x0)) * iw);
   const sy = (v) => M.t + ih - ((v - sc.lo) / (sc.hi - sc.lo || 1)) * ih;
@@ -80,10 +111,16 @@ function renderChart(host, points, opts = {}) {
     role: "img", "aria-label": opts.label || "Graphique de progression",
   });
 
-  /* dégradé sous la courbe */
+  /* Dégradé sous la courbe, ancré sur la courbe elle-même (du point
+     le plus haut au bas du cadre) : il suit la forme au lieu d'un
+     aplat. Un id par graphique — deux graphiques à l'écran ne se
+     volent pas leur dégradé. */
+  const gid = `ch-grad-${Math.random().toString(36).slice(2, 8)}`;
   const defs = el("defs");
-  const grad = el("linearGradient", { id: "ch-grad", x1: "0", y1: "0", x2: "0", y2: "1" });
-  grad.append(el("stop", { offset: "0", "stop-color": color, "stop-opacity": ".26" }),
+  const grad = el("linearGradient", { id: gid, gradientUnits: "userSpaceOnUse",
+    x1: 0, y1: sy(yMax), x2: 0, y2: M.t + ih });
+  grad.append(el("stop", { offset: "0", "stop-color": color, "stop-opacity": ".30" }),
+              el("stop", { offset: ".6", "stop-color": color, "stop-opacity": ".08" }),
               el("stop", { offset: "1", "stop-color": color, "stop-opacity": "0" }));
   defs.append(grad);
   svg.append(defs);
@@ -100,36 +137,54 @@ function renderChart(host, points, opts = {}) {
     svg.append(lab);
   });
 
-  const d = points.map((p, i) => `${i ? "L" : "M"}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ");
-  svg.append(el("path", {
+  const P = points.map((p) => [sx(p.x), sy(p.y)]);
+  const d = smoothPath(P);
+  const area = el("path", {
     d: `${d} L${sx(x1).toFixed(1)},${M.t + ih} L${sx(x0).toFixed(1)},${M.t + ih} Z`,
-    fill: "url(#ch-grad)",
-  }));
-  svg.append(el("path", { d, fill: "none", stroke: color, "stroke-width": 2,
-    "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    fill: `url(#${gid})`,
+  });
+  const line = el("path", { d, fill: "none", stroke: color, "stroke-width": 2.5,
+    "stroke-linejoin": "round", "stroke-linecap": "round" });
+  svg.append(area, line);
 
-  /* Points. Un record porte un anneau plus large + une étiquette :
-     l'identité ne passe jamais par la couleur seule. */
+  /* Points. Au-delà d'une douzaine, la courbe suffit : seuls les
+     records et le dernier gardent leur point. Un record porte un
+     anneau + « Record » dans l'infobulle : jamais la couleur seule. */
+  const last = points[points.length - 1];
+  const many = points.length > 12;
+  const dots = el("g");
   points.forEach((p) => {
     const cx = sx(p.x), cy = sy(p.y), isPR = prSet.has(p.x);
+    if (many && !isPR && p !== last) return;
     if (isPR) {
-      svg.append(el("circle", { cx, cy, r: 7.5, fill: "none",
-        stroke: color, "stroke-width": 2, opacity: ".55" }));
+      dots.append(el("circle", { cx, cy, r: 8, fill: "none",
+        stroke: color, "stroke-width": 1.5, opacity: ".5" }));
     }
-    svg.append(el("circle", { cx, cy, r: isPR ? 4.6 : 3.4, fill: color,
+    dots.append(el("circle", { cx, cy, r: p === last ? 5 : 4, fill: color,
       stroke: cSurf, "stroke-width": 2 }));
   });
+  svg.append(dots);
 
-  /* Dernière valeur étiquetée en clair — jamais toutes. */
-  const last = points[points.length - 1];
+  /* Dernière valeur dans une pastille au-dessus du point — jamais
+     toutes, et jamais par-dessus la courbe. */
   const lx = sx(last.x), ly = sy(last.y);
-  const tag = el("text", {
-    x: Math.min(lx + 9, M.l + iw), y: Math.max(ly - 10, M.t + 9),
-    "text-anchor": lx > M.l + iw - 46 ? "end" : "start",
-    fill: cText, "font-size": "12.5", "font-weight": "650",
-  });
-  tag.textContent = `${fmt(last.y)} ${unit}`.trim();
-  svg.append(tag);
+  const label = `${fmt(last.y)} ${unit}`.trim();
+  const tw = label.length * 7.2 + 16, th = 22;
+  const tx = Math.max(M.l, Math.min(lx - tw / 2, M.l + iw - tw + 4));
+  /* Au-dessus de TOUT ce que la pastille couvre en largeur (la courbe
+     monotone ne dépasse jamais ses points) ; sans place, en dessous. */
+  const under = P.filter(([x]) => x >= tx - 8 && x <= tx + tw + 8).map(([, y]) => y);
+  let ty = Math.min(...under) - th - 10;
+  if (ty < 2) ty = Math.min(Math.max(...under) + 12, H - th - 2);
+  const pill = el("g");
+  pill.append(
+    el("rect", { x: tx, y: ty, width: tw, height: th, rx: 11, fill: cSurf, stroke: cLine, "stroke-width": 1 }),
+  );
+  const tag = el("text", { x: tx + tw / 2, y: ty + 15, "text-anchor": "middle",
+    fill: cText, "font-size": "12.5", "font-weight": "650" });
+  tag.textContent = label;
+  pill.append(tag);
+  svg.append(pill);
 
   /* dates aux extrémités */
   [[x0, "start", M.l], [x1, "end", M.l + iw]].forEach(([v, anchor, x]) => {
@@ -153,6 +208,24 @@ function renderChart(host, points, opts = {}) {
   wrap.className = "chart-wrap";
   wrap.append(svg, tip);
   host.append(wrap);
+
+  /* La courbe se trace de gauche à droite, puis le dégradé, les
+     points et la pastille apparaissent. Ressort amorti, sans rebond. */
+  const sig = `${opts.label}|${points.length}|${last.x}|${last.y}`;
+  if (!REDUCED.matches && drawnSigs.get(host) !== sig) {
+    const len = line.getTotalLength();
+    line.style.strokeDasharray = `${len} ${len}`;
+    const after = [area, dots, pill];
+    const paint = (v) => {
+      line.style.strokeDashoffset = String(len * (1 - Math.min(1, v)));
+      const f = Math.max(0, Math.min(1, (v - 0.55) / 0.45));
+      after.forEach((n) => { n.style.opacity = String(f); });
+    };
+    paint(0);
+    new Spring(0, { response: 0.75, damping: 1, restDelta: 0.002, onUpdate: paint,
+      onRest: () => { line.style.strokeDasharray = ""; line.style.strokeDashoffset = ""; } }).to(1);
+  }
+  drawnSigs.set(host, sig);
 
   const nearest = (px) => {
     const ratio = W / wrap.clientWidth;

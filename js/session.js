@@ -142,7 +142,14 @@ function startSession(program, resume = null) {
     S.goalsHit = resume.goalsHit || [];
     sEl("session-note").value = resume.note || "";
   } else {
-    S.exercises = program.exercises.map((e) => ({ ...e }));
+    /* Programme d'un bloc en cours : séries et reps de CETTE semaine
+       du plan. Ça ne règle que le départ — tout reste ajustable. */
+    const blk = !program.free && program.blockId ? blockById(program.blockId) : null;
+    const w = blk && blk.start && !blk.endedAt ? blockWeek(blk) : 0;
+    S.exercises = program.exercises.map((e) => {
+      const p = weekPlan(e, w);
+      return p ? { ...e, sets: p.sets ?? e.sets, reps: p.reps ?? e.reps, plan: { w, cue: p.cue || "" } } : { ...e };
+    });
     S.state = S.exercises.map(initState);
     S.logIds = new Map();
     S.startedAt = Date.now();
@@ -295,11 +302,24 @@ function soloHead(i) {
       ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
     ].filter(Boolean).join(" · ");
   const note = DB.notes[ex.name];
-  return `<h2 class="ex-name">${esc(ex.name)}</h2>` +
+  return (ex.isNew ? `<span class="badge new">Nouveau · à essayer</span>` : "") +
+    `<h2 class="ex-name">${esc(ex.name)}</h2>` +
     `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
+    planLine(i) +
     `<div class="ex-goals" data-goal-ex="${i}"></div>` +
     (note ? `<p class="ex-note">${esc(note)}</p>` : "") +
     techLink(ex.name);
+}
+
+/* La semaine du bloc et la consigne du coach. Une indication : les
+   chiffres de la carte restent les tiens. */
+const PLAN_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>';
+function planLine(i, withName = false) {
+  const ex = S.exercises[i];
+  if (!ex.plan) return "";
+  if (withName && !ex.plan.cue) return "";
+  return `<p class="ex-plan">${PLAN_IC}<span>${withName ? `<b>${esc(ex.name)}</b> · ` : `Semaine ${ex.plan.w} du bloc`}` +
+    `${ex.plan.cue ? `${withName ? "" : " — "}${esc(ex.plan.cue)}` : ""}</span></p>`;
 }
 
 /* Les objectifs de l'exercice, sur sa carte : ce qui reste suit les
@@ -346,6 +366,9 @@ function ssHead(blk) {
     `<h2 class="ex-name ss-title">${names}</h2>` +
     `<p class="ex-target"><b>${ssRounds(blk)}</b> tours<span class="dot-sep"></span>` +
     `<span>${blk.members.length} exercices enchaînés</span></p>` +
+    (S.exercises[blk.members[0]].plan
+      ? `<p class="ex-plan">${PLAN_IC}<span>Semaine ${S.exercises[blk.members[0]].plan.w} du bloc</span></p>` : "") +
+    blk.members.map((i) => planLine(i, true)).join("") +
     blk.members.map((i) => `<div class="ex-goals" data-goal-ex="${i}"></div>`).join("") +
     notes +
     blk.members.map((i) => techLink(S.exercises[i].name, true)).join("");
@@ -1123,11 +1146,36 @@ function sessionMenu(focus) {
      sinon — et un nom neuf prend le type de celui qu'il remplace. */
   if ($("sm-swap")) $("sm-swap").addEventListener("click", then(() => pickExercise(ex.name, (name) => {
     if (name === ex.name) return;
-    const next = { ...ex, name };
-    S.exercises[i] = next;
-    S.state[i] = initState(next);
-    rebuildStack(i);
-    toast(`Remplacé par ${name}`);
+    /* `forBlock` : le programme du coach change aussi, son plan suit
+       le nouvel exercice, et le coach saura lequel n'a pas plu. */
+    const apply = (forBlock) => {
+      const { isNew, ...rest } = ex;
+      const next = { ...rest, name };
+      S.exercises[i] = next;
+      S.state[i] = initState(next);
+      rebuildStack(i);
+      if (forBlock) {
+        const pe = S.program.exercises.find((e) => e.name === ex.name);
+        if (pe) { pe.name = name; delete pe.isNew; persist.programs(); }
+        recordSwap(S.program, ex.name, name);
+      }
+      buzz(9);
+      toast(forBlock ? `${name} — pour le reste du bloc` : `Remplacé par ${name}`);
+    };
+    const inBlock = S.program.blockId && blockById(S.program.blockId) && S.program.exercises.some((e) => e.name === ex.name);
+    if (!inBlock) { apply(false); return; }
+    openSheet(
+      `<p class="sheet-kicker">Remplacer ${esc(ex.name)}</p>
+       <h2 class="sheet-h">Par ${esc(name)}</h2>
+       <div class="menu-list">
+         <button type="button" class="pick-row" id="sw-today"><span>Juste aujourd'hui
+           <em class="pick-sub">Le programme ne change pas</em></span>${MENU_IC.swap}</button>
+         <button type="button" class="pick-row" id="sw-block"><span>Pour le reste du bloc
+           <em class="pick-sub">Le plan suit, et ton coach le saura</em></span>${MENU_IC.swap}</button>
+       </div>`
+    );
+    $("sw-today").addEventListener("click", () => { closeSheet(); onSheetClose = () => apply(false); });
+    $("sw-block").addEventListener("click", () => { closeSheet(); onSheetClose = () => apply(true); });
   }, { kind: ex.kind === "cardio" ? "cardio" : "force" })));
 
   $("sm-skip").addEventListener("click", then(() => toggleSkip(i)));
