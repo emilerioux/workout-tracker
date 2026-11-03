@@ -598,6 +598,12 @@ function setRow(i, j, tag, name, active) {
       : "");
 
   if (active) li.querySelectorAll(".num[data-k]").forEach((el) => bindScrub(el, el.dataset.k, i));
+  /* Toucher une série validée ouvre le menu, où elle se corrige. */
+  if (rec) li.addEventListener("click", () => {
+    if (!S.blocks[S.idx] || !S.blocks[S.idx].members.includes(i)) return;
+    buzz(6);
+    sessionMenu(i);
+  });
   return li;
 }
 
@@ -1119,6 +1125,9 @@ function sessionMenu(focus) {
      ${blk.superset ? `<div class="segmented small who" id="sm-who">${blk.members.map((m, k) =>
         `<button type="button" data-i="${m}" class="${m === i ? "on" : ""}">${blk.letter}${k + 1} · ${esc(S.exercises[m].name)}</button>`).join("")}</div>` : ""}
      ${!cardio && !st.skipped ? stepperRow("sm-count", st.target, { label: "Séries", sub: doneTxt }) : ""}
+     ${!cardio && st.done.length ? `<p class="block-key">Séries validées</p>
+       <div id="sm-done"></div>
+       <p class="fineprint sm-done-note">Validé trop vite ? Corrige le poids ou les reps, puis Enregistrer.</p>` : ""}
      <div class="menu-list">
        ${st.done.length ? "" : `<button type="button" class="pick-row" id="sm-swap"><span>Remplacer par un autre exercice</span>${MENU_IC.swap}</button>`}
        <button type="button" class="pick-row${st.skipped ? "" : " warn"}" id="sm-skip">
@@ -1142,6 +1151,8 @@ function sessionMenu(focus) {
     ? bindStepper("sm-count", { min: Math.max(1, st.done.length), max: 20 })
     : null;
   const glob = bindGlobal(ex.name);
+  const fixer = !cardio && st.done.length
+    ? setRowsEditor("sm-done", st.done.map((d) => ({ weight: d.weight, reps: d.reps }))) : null;
 
   /* Ce qui a été changé s'écrit avant toute action : passer ou
      remplacer ne jette pas le nombre de séries ni la note. Renvoie
@@ -1152,6 +1163,13 @@ function sessionMenu(focus) {
     const n = count ? count() : null;
     const noteBefore = DB.notes[ex.name] || "", linkBefore = DB.links[ex.name] || "";
     glob.apply();
+    if (fixer) {
+      const rows = fixer.read();
+      if (rows.length !== st.done.length || rows.some((r, k) => r.weight !== st.done[k].weight || r.reps !== st.done[k].reps)) {
+        fixDoneSets(i, rows);
+        toast("Séries corrigées");
+      }
+    }
     const techChanged = (DB.notes[ex.name] || "") !== noteBefore || (DB.links[ex.name] || "") !== linkBefore;
     if (n && n !== st.target) { st.target = n; refreshBlockOf(i); saveLive(); }
     if (techChanged) rebuildStack(i);
@@ -1234,6 +1252,27 @@ function addExtra(x) {
     buzz(9);
     toast(`${x.label} ajouté — facultatif, arrête quand tu veux`);
   }, 260);
+}
+
+/* Une série validée trop vite se corrige : l'historique, le record
+   et la liste des records de fin de séance suivent les vrais chiffres. */
+function fixDoneSets(i, rows) {
+  const st = S.state[i], ex = S.exercises[i];
+  st.done = rows.map((r, k) => ({ ...(st.done[k] || {}), weight: r.weight, reps: r.reps }));
+  if (S.logIds.has(i)) flushExercise(i);
+  const own = S.logIds.get(i);
+  const before = DB.logs.filter((l) => l.exercise === ex.name && l.id !== own && !cardioLog(l))
+    .reduce((m, l) => Math.max(m, l.perSet ? Math.max(...l.perSet.map((s) => Number(s.weight) || 0)) : Number(l.weight) || 0), 0);
+  const top = Math.max(0, ...st.done.map((d) => Number(d.weight) || 0));
+  if (Math.max(before, top) > 0) DB.prs[ex.name] = Math.max(before, top); else delete DB.prs[ex.name];
+  persist.prs();
+  const k = S.beatenPRs.findIndex((p) => p.name === ex.name);
+  if (top > before) {
+    if (k >= 0) S.beatenPRs[k].weight = top;
+    else S.beatenPRs.push({ name: ex.name, weight: top, prev: before });
+  } else if (k >= 0) S.beatenPRs.splice(k, 1);
+  refreshBlockOf(i);
+  saveLive();
 }
 
 /* Ajouter un exercice à la séance en cours. En séance libre, il

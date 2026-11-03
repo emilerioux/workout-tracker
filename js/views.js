@@ -1036,8 +1036,11 @@ function renderPrograms() {
     title: blockTitle(b), progs: blockPrograms(b),
     next: b.start ? nextInRotation(b) : null,
   })).filter((s) => s.progs.length);
+  /* Avec un bloc en cours, les programmes à soi se rangent derrière
+     un seul bouton : la page d'accueil ne montre que la rotation. */
   const others = DB.programs.filter((p) => !p.blockId || !blockById(p.blockId));
-  if (others.length) sections.push({ title: sections.length ? "Autres programmes" : null, progs: others, next: null });
+  const folded = sections.length > 0 && others.length > 0;
+  if (others.length && !folded) sections.push({ title: null, progs: others, next: null });
 
   if (!sections.length) {
     host.innerHTML =
@@ -1051,7 +1054,13 @@ function renderPrograms() {
   }
 
   host.innerHTML = sections.map((s) =>
-    `${s.title ? `<p class="prog-sec">${esc(s.title)}</p>` : ""}${s.progs.map((p) => progCard(p, p.id === s.next)).join("")}`).join("");
+    `${s.title ? `<p class="prog-sec">${esc(s.title)}</p>` : ""}${s.progs.map((p) => progCard(p, p.id === s.next)).join("")}`).join("") +
+    (folded ? `<button type="button" class="card-surface badges-row others-row" id="others-open">
+       <span class="badges-count"><b class="tnum">${others.length}</b><i>prog.</i></span>
+       <span class="badges-txt"><b>Autres programmes</b><em>${esc(others.map((p) => p.name).join(" · "))}</em></span>
+       <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+     </button>` : "");
+  if (folded) $("others-open").addEventListener("click", () => { buzz(6); othersPage(); });
 
   host.querySelectorAll(".prog-card").forEach((b) => {
     b.addEventListener("pointerdown", () => b.classList.add("pressed"));
@@ -1059,6 +1068,31 @@ function renderPrograms() {
       b.addEventListener(ev, () => b.classList.remove("pressed")));
     b.addEventListener("click", () => showProgram(b.dataset.id));
   });
+}
+
+/* Les programmes hors bloc (abdos, Bras…), le dernier fait en haut. */
+function othersPage() {
+  const lastOf = (p) => Math.max(0, ...DB.logs.filter((l) => l.programId === p.id).map((l) => l.createdAt));
+  const list = DB.programs.filter((p) => !p.blockId || !blockById(p.blockId)).sort((a, b) => lastOf(b) - lastOf(a));
+  pushView(
+    `<header class="pushed-bar">
+       <button class="icon-btn" data-back aria-label="Retour">
+         <svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>
+       </button>
+       <span class="pushed-title">Autres programmes</span>
+       <span class="icon-btn ghost-slot"></span>
+     </header>
+     <div class="pushed-scroll">
+       <h1 class="big-title">Autres programmes</h1>
+       <p class="big-sub">Tes programmes à toi, en dehors du bloc du coach. Le dernier fait est en haut.</p>
+       <div class="others-list">${list.map((p) => progCard(p, false)).join("")}</div>
+     </div>`
+  );
+  $("pushed").querySelectorAll(".prog-card").forEach((b) => b.addEventListener("click", () => {
+    buzz(6);
+    popView();
+    setTimeout(() => showProgram(b.dataset.id), 240);
+  }));
 }
 
 function relDay(dateStr) {

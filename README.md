@@ -239,6 +239,14 @@ Un muscle à 0 reste gris. Toucher une zone ouvre le même détail que la barre.
 d'avant (« dernière fois 155 × 8 », `prevSet`) ; validée, elle dit « battu ↑ »
 (plus lourd, ou même poids et plus de reps) ou « égalé ».
 
+**Autres programmes** — avec un bloc en cours, l'accueil ne montre que la
+rotation ; les programmes à soi se rangent derrière un bouton « Autres
+programmes » qui ouvre leur page (`othersPage`, le dernier fait en haut).
+
+**Corriger une série validée** — toucher une série cochée (ou menu ⋯) ouvre
+« Séries validées » : poids et reps en − / +, ou retirer la série.
+`fixDoneSets` réécrit l'entrée d'historique, le record et les records de la séance.
+
 **Ordre des objectifs** — bouton « Ordre » sur la carte Objectifs : poignées à
 glisser, le plus important en haut (l'ordre de `DB.goals`).
 
