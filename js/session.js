@@ -543,6 +543,26 @@ function cardioRow(i) {
 
 const CARDIO_ICON = '<svg viewBox="0 0 24 24" class="cardio-ic" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>';
 
+/* « À battre » : la même série à la séance d'avant (série 3 contre
+   série 3). Une fois validée, la rangée dit si elle l'a battue —
+   plus lourd, ou même poids et plus de reps — ou égalée. */
+function prevSet(st, j) {
+  const l = st.last;
+  if (!l) return null;
+  if (l.perSet) return l.perSet[j] || null;
+  return j < (Number(l.sets) || 0) ? { weight: l.weight, reps: l.reps } : null;
+}
+function prevTag(st, j, rec) {
+  const p = prevSet(st, j);
+  if (!p) return "";
+  const pw = Number(p.weight) || 0, pr = Number(p.reps) || 0;
+  const v = `${fmt(pw)} × ${pr}`;
+  if (!rec) return `<span class="set-prev"><i>dernière fois</i><b>${v}</b></span>`;
+  const w = Number(rec.weight) || 0, r = Number(rec.reps) || 0;
+  const up = w > pw || (w === pw && r > pr), eq = w === pw && r === pr;
+  return `<span class="set-prev${up ? " up" : ""}"><i>${up ? "battu ↑" : eq ? "égalé" : "dernière fois"}</i><b>${v}</b></span>`;
+}
+
 /* Une rangée de série. `name` n'est rempli que dans un superset :
    sans lui on ne saurait pas de quel exercice parle la rangée. */
 function setRow(i, j, tag, name, active) {
@@ -568,8 +588,8 @@ function setRow(i, j, tag, name, active) {
   li.innerHTML =
     `<span class="set-idx">${esc(tag)}</span>` +
     (name
-      ? `<span class="ss-cell"><span class="ss-ex">${esc(name)}</span><span class="set-vals">${vals}</span></span>`
-      : `<span class="set-vals">${vals}</span>`) +
+      ? `<span class="ss-cell"><span class="ss-ex">${esc(name)}</span><span class="set-vals">${vals}${prevTag(st, j, rec)}</span></span>`
+      : `<span class="set-vals">${vals}${prevTag(st, j, rec)}</span>`) +
     `<span class="set-check">${CHECK}</span>` +
     (active && !st.last && !st.draft.weight
       ? `<p class="scrub-hint">Première fois sur cet exercice — règle le poids en le tirant vers le haut</p>`

@@ -1702,3 +1702,13 @@ label.block-key { display: block; }
 .body-low { margin: 12px 0 0; font-size: .75rem; text-align: center; color: var(--tx-2); }
 .body-low b { color: var(--tx); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .body-zone { transition: none; } }
+
+/* « À battre » : la même série la dernière fois, à droite des chiffres. */
+.set-prev {
+  margin-left: auto; padding-left: 8px; align-self: center;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  line-height: 1.15; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.set-prev i { font-style: normal; font-size: .625rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--tx-3); }
+.set-prev b { font-size: .75rem; font-weight: 600; color: var(--tx-2); }
+.set-prev.up i, .set-prev.up b { color: var(--accent-tx); }

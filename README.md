@@ -235,6 +235,10 @@ dos (`renderBodyMap`), les mêmes séries par muscle en 5 marches d'une seule
 teinte (0, 1–3, 4–7, 8–11, 12+ par semaine ; moyenne par semaine sur 4 sem.).
 Un muscle à 0 reste gris. Toucher une zone ouvre le même détail que la barre.
 
+**À battre** — en séance, chaque série montre la même série à la séance
+d'avant (« dernière fois 155 × 8 », `prevSet`) ; validée, elle dit « battu ↑ »
+(plus lourd, ou même poids et plus de reps) ou « égalé ».
+
 **Ordre des objectifs** — bouton « Ordre » sur la carte Objectifs : poignées à
 glisser, le plus important en haut (l'ordre de `DB.goals`).
 
