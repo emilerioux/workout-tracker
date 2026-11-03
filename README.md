@@ -230,6 +230,11 @@ mouvement (« Pull-ups » / « Pull Ups », `similarExercises`) et les fusionne
 (`mergeExercises` : historique, records, objectifs, programmes). « Fusionner
 deux exercices » pour les autres ; « Ce ne sont pas les mêmes » → `wt2-not-dupes`.
 
+**Carte du corps** — Progrès → Muscles, sous les barres : silhouette devant /
+dos (`renderBodyMap`), les mêmes séries par muscle en 5 marches d'une seule
+teinte (0, 1–3, 4–7, 8–11, 12+ par semaine ; moyenne par semaine sur 4 sem.).
+Un muscle à 0 reste gris. Toucher une zone ouvre le même détail que la barre.
+
 **Ordre des objectifs** — bouton « Ordre » sur la carte Objectifs : poignées à
 glisser, le plus important en haut (l'ordre de `DB.goals`).
 

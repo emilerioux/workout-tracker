@@ -2198,6 +2198,69 @@ function renderMuscles() {
 
   $("muscle-bars").querySelectorAll(".mbar").forEach((b) =>
     b.addEventListener("click", () => muscleSheet(b.dataset.m)));
+  renderBodyMap(cur);
+}
+
+/* ── Carte du corps ────────────────────────────────────────
+   Les mêmes chiffres que les barres, sur une silhouette devant /
+   dos. Une seule teinte (l'accent) en 5 marches, de « rien » au
+   gris jusqu'à 12 séries et plus par semaine : un muscle oublié
+   reste gris et ressort. Les barres au-dessus sont la version
+   texte ; toucher une zone ouvre le même détail. */
+const BODY_STEPS = [0, 4, 8, 12];            /* séries par semaine */
+const BODY_MIX = [0, 30, 54, 78, 100];        /* % d'accent par marche */
+const bodyLevel = (perWeek) => perWeek <= 0 ? 0 : 1 + BODY_STEPS.slice(1).filter((s) => perWeek >= s).length;
+const pair = (f) => [f(1), f(-1)];           /* gauche, puis miroir à droite */
+const mx = (x, s) => (s > 0 ? x : 120 - x);
+const BODY = {
+  base: [
+    `<circle cx="60" cy="18" r="12"/>`, `<rect x="54" y="29" width="12" height="10" rx="3"/>`,
+    ...pair((s) => `<ellipse cx="${mx(24, s)}" cy="113" rx="5.5" ry="14"/>`),
+    ...pair((s) => `<circle cx="${mx(22, s)}" cy="133" r="4.5"/>`),
+    ...pair((s) => `<ellipse cx="${mx(50, s)}" cy="247" rx="7" ry="3"/>`),
+  ],
+  front: [
+    ...pair((s) => ["Épaules", `<ellipse cx="${mx(32, s)}" cy="52" rx="10" ry="9"/>`]),
+    ...pair((s) => ["Pectoraux", `<path d="M${mx(58.5, s)} 44V74Q${mx(50, s)} 78 ${mx(44, s)} 71Q${mx(41, s)} 60 ${mx(45, s)} 47Q${mx(51, s)} 43 ${mx(58.5, s)} 44Z"/>`]),
+    ...pair((s) => ["Biceps", `<ellipse cx="${mx(27, s)}" cy="80" rx="6.5" ry="14"/>`]),
+    ...[79, 95, 111].flatMap((y) => pair((s) => ["Abdos", `<rect x="${s > 0 ? 48 : 61}" y="${y}" width="11" height="14" rx="4"/>`])),
+    [null, `<path d="M47 128H73L71 145Q60 151 49 145Z"/>`],
+    ...pair((s) => ["Jambes", `<ellipse cx="${mx(50, s)}" cy="179" rx="10" ry="28"/>`]),
+    ...pair((s) => [null, `<ellipse cx="${mx(50, s)}" cy="226" rx="7" ry="18"/>`]),
+  ],
+  back: [
+    ["Dos", `<path d="M48 34H72L82 45L60 55L38 45Z"/>`],
+    ...pair((s) => ["Épaules", `<ellipse cx="${mx(32, s)}" cy="52" rx="10" ry="9"/>`]),
+    ...pair((s) => ["Dos", `<path d="M${mx(58.5, s)} 58V102Q${mx(50, s)} 103 ${mx(46, s)} 92Q${mx(41, s)} 76 ${mx(43, s)} 58Q${mx(51, s)} 55 ${mx(58.5, s)} 58Z"/>`]),
+    ["Dos", `<rect x="50" y="105" width="20" height="19" rx="5"/>`],
+    ...pair((s) => ["Triceps", `<ellipse cx="${mx(27, s)}" cy="80" rx="6.5" ry="14"/>`]),
+    ...pair((s) => ["Jambes", `<ellipse cx="${mx(51, s)}" cy="139" rx="9.5" ry="12"/>`]),
+    ...pair((s) => ["Jambes", `<ellipse cx="${mx(50, s)}" cy="180" rx="9" ry="25"/>`]),
+    ...pair((s) => ["Jambes", `<ellipse cx="${mx(50, s)}" cy="224" rx="7" ry="17"/>`]),
+  ],
+};
+
+function renderBodyMap(cur) {
+  const per = (m) => (cur[m] || 0) / muscleSpan;
+  const fill = (m) => {
+    const lv = bodyLevel(per(m));
+    return lv ? `color-mix(in srgb, var(--accent) ${BODY_MIX[lv]}%, var(--grid))` : "var(--grid)";
+  };
+  const fig = (side, title) => `<figure class="body-fig">
+      <svg viewBox="0 0 120 252" role="img" aria-label="${title}">
+        <g class="body-base">${BODY.base.join("")}${BODY[side].filter(([m]) => !m).map(([, d]) => d).join("")}</g>
+        ${BODY[side].filter(([m]) => m).map(([m, d]) =>
+          `<g class="body-zone" data-m="${esc(m)}" style="fill:${fill(m)}"><title>${esc(m)} : ${fmt(cur[m] || 0)} séries</title>${d}</g>`).join("")}
+      </svg><figcaption>${title}</figcaption></figure>`;
+  const low = MUSCLES.filter((m) => m !== "Autre" && per(m) < BODY_STEPS[1]);
+  $("body-map").innerHTML =
+    `<div class="body-figs">${fig("front", "Devant")}${fig("back", "Dos")}</div>
+     <div class="body-legend" aria-hidden="true">${BODY_MIX.map((p, k) =>
+       `<span><i style="background:${k ? `color-mix(in srgb, var(--accent) ${p}%, var(--grid))` : "var(--grid)"}"></i>${["0", "1–3", "4–7", "8–11", "12+"][k]}</span>`).join("")}
+       <em>séries${muscleSpan > 1 ? " par semaine, en moyenne" : " cette semaine"}</em></div>
+     ${low.length && Object.values(cur).some(Boolean)
+       ? `<p class="body-low"><b>Peu travaillé${low.length > 1 ? "s" : ""}</b> · ${low.map(esc).join(", ")}</p>` : ""}`;
+  $("body-map").querySelectorAll(".body-zone").forEach((z) => z.addEventListener("click", () => { buzz(6); muscleSheet(z.dataset.m); }));
 }
 
 /* Les exercices rangés sous un muscle, pour vérifier ou corriger
