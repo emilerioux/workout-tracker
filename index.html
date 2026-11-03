@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Workouts">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="style.css?v=32">
+<link rel="stylesheet" href="style.css?v=33">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -300,6 +300,11 @@
           <p class="block-key">À fêter</p>
           <ul class="win-list" id="win-list"></ul>
         </div>
+        <div class="sheet-block" id="extra-block" hidden>
+          <p class="block-key">Un petit extra ?</p>
+          <p class="extra-sub">Facultatif — ta séance est déjà complète.</p>
+          <div class="extra-chips" id="extra-chips"></div>
+        </div>
         <div class="sheet-block">
           <label class="block-key" for="session-note">Note sur la séance</label>
           <textarea class="input" id="session-note" rows="2" placeholder="Ex : mal dormi, énergie basse — ou grosse séance"></textarea>
@@ -335,14 +340,14 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
-<script src="js/theme.js?v=32"></script>
-<script src="js/motion.js?v=32"></script>
-<script src="js/data.js?v=32"></script>
-<script src="js/chart.js?v=32"></script>
-<script src="js/fiche.js?v=32"></script>
-<script src="js/session.js?v=32"></script>
-<script src="js/views.js?v=32"></script>
-<script src="js/app.js?v=32"></script>
+<script src="js/theme.js?v=33"></script>
+<script src="js/motion.js?v=33"></script>
+<script src="js/data.js?v=33"></script>
+<script src="js/chart.js?v=33"></script>
+<script src="js/fiche.js?v=33"></script>
+<script src="js/session.js?v=33"></script>
+<script src="js/views.js?v=33"></script>
+<script src="js/app.js?v=33"></script>
 <script>
   /* En local on ne l'enregistre pas : il resservirait l'ancienne
      version depuis son cache à chaque rechargement pendant le dev. */

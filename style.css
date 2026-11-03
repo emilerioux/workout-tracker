@@ -1648,3 +1648,40 @@ label.block-key { display: block; }
 .mbar.static:active { background: none; }
 .bk-send { margin-top: 24px; }
 .fx-plan { margin: -4px 2px 14px; }
+
+/* ══ SEMAINES CHARGÉES, EXTRAS, ORDRE DES OBJECTIFS ═══════ */
+/* Semaine chargée : une note sur la carte du bloc, jamais une alerte. */
+.bk-light {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 12px; padding: 11px 12px; border-radius: var(--r-md);
+  background: var(--glass);
+}
+.bk-light > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bk-light b { font-size: .8125rem; font-weight: 600; }
+.bk-light em { font-style: normal; font-size: .75rem; line-height: 1.4; color: var(--tx-2); }
+.bk-light button { flex: none; height: 32px; padding: 0 12px; }
+
+/* Fin de séance : l'extra se choisit d'un toucher. */
+.extra-sub { margin: -4px 0 10px; font-size: .75rem; color: var(--tx-3); }
+.extra-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.extra-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 14px; border: 0; border-radius: var(--r-md);
+  background: var(--glass); color: var(--tx); font: inherit; text-align: left; cursor: pointer;
+  transition: transform 90ms ease-out, background-color 100ms ease-out;
+}
+.extra-chip b { font-size: .875rem; font-weight: 600; }
+.extra-chip em { font-style: normal; font-size: .75rem; color: var(--tx-3); }
+.extra-chip:active { transform: scale(.96); background: var(--glass-2); }
+
+/* Objectifs : mode « Ordre ». */
+.goal-btns { display: inline-flex; gap: 6px; }
+.mini-btn.on { padding: 0 14px; background: var(--accent); color: var(--accent-ink, #000); }
+.goal-hint { margin: -4px 2px 10px; font-size: .75rem; color: var(--tx-3); }
+.goal-r { display: flex; align-items: center; gap: 4px; border-radius: var(--r-md); position: relative; }
+.goal-r .goal { flex: 1; min-width: 0; cursor: default; }
+.goal-r .goal:active { transform: none; background: var(--glass); }
+.goal-r .drag-handle { margin: 0; width: 40px; height: 44px; }
+.goal-r.lifted { z-index: 5; box-shadow: var(--sh-card); }
+.goal-r.lifted .goal { background: var(--elev); box-shadow: inset 0 0 0 1px var(--line-hi); }
+@media (prefers-reduced-motion: reduce) { .extra-chip, .goal { transition: none; } }

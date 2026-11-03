@@ -129,7 +129,7 @@ function plateauOf(name) {
 /* `program.free` = séance libre : pas de programme, on ajoute les
    exercices au fil de l'eau. `resume` = une séance interrompue
    (app fermée, appel, batterie) qu'on rouvre là où elle était. */
-function startSession(program, resume = null) {
+function startSession(program, resume = null, { short = false } = {}) {
   if (!resume && !program.free && !program.exercises.length) { toast("Ce programme n'a pas encore d'exercices"); return; }
 
   S.program = program;
@@ -150,11 +150,14 @@ function startSession(program, resume = null) {
       const p = weekPlan(e, w);
       return p ? { ...e, sets: p.sets ?? e.sets, reps: p.reps ?? e.reps, plan: { w, cue: p.cue || "" } } : { ...e };
     });
+    /* Semaine chargée, version courte choisie : sans les accessoires. */
+    if (short) S.exercises = shortVersion(S.exercises).map((e) => e.plan ? { ...e, plan: { ...e.plan, short: true } } : e);
     S.state = S.exercises.map(initState);
     S.logIds = new Map();
     S.startedAt = Date.now();
     S.beatenPRs = [];
     S.goalsHit = [];
+    S.extra = false;
     sEl("session-note").value = "";
   }
   S.blocks = groupBlocks(S.exercises);
@@ -318,7 +321,7 @@ function planLine(i, withName = false) {
   const ex = S.exercises[i];
   if (!ex.plan) return "";
   if (withName && !ex.plan.cue) return "";
-  return `<p class="ex-plan">${PLAN_IC}<span>${withName ? `<b>${esc(ex.name)}</b> · ` : `Semaine ${ex.plan.w} du bloc`}` +
+  return `<p class="ex-plan">${PLAN_IC}<span>${withName ? `<b>${esc(ex.name)}</b> · ` : `Semaine ${ex.plan.w} du bloc${ex.plan.short ? " · version courte" : ""}`}` +
     `${ex.plan.cue ? `${withName ? "" : " — "}${esc(ex.plan.cue)}` : ""}</span></p>`;
 }
 
@@ -963,6 +966,14 @@ function fillSummary() {
     badges.map((b) => `<li><span class="win-ic badge-ic">${esc(b.big)}</span><span class="win-t"><b>${esc(b.title)}</b>` +
       `<i>Jalon débloqué</i></span></li>`).join("");
 
+  /* Un extra après une séance complète : abdos ou cardio, jamais imposé. */
+  const extras = allDone() && !S.extra && !S.program.free ? extraOptions(S.program) : [];
+  sEl("extra-block").hidden = !extras.length;
+  sEl("extra-chips").innerHTML = extras.map((x, k) =>
+    `<button type="button" class="extra-chip" data-k="${k}"><b>${esc(x.label)}</b><em>${esc(x.sub)}</em></button>`).join("");
+  sEl("extra-chips").querySelectorAll("[data-k]").forEach((b) =>
+    b.addEventListener("click", () => addExtra(extras[Number(b.dataset.k)])));
+
   /* Une séance libre réussie peut devenir un programme. */
   sEl("save-as-prog").hidden = !(S.program.free && S.exercises.some((_, i) => S.state[i].done.length));
 
@@ -1182,6 +1193,27 @@ function sessionMenu(focus) {
   $("sm-hist").addEventListener("click", then(() => exerciseHistorySheet(ex.name)));
   $("sm-add").addEventListener("click", then(addToSession));
   $("fx-save").addEventListener("click", then(() => buzz(9)));
+}
+
+/* L'extra choisi s'ajoute au bout de la séance, supersets gardés ;
+   le programme, lui, ne change pas. On peut le passer ou terminer
+   quand on veut. */
+function addExtra(x) {
+  S.extra = true;
+  closeSummary();
+  setTimeout(() => {
+    const first = S.exercises.length, map = new Map();
+    x.exercises.forEach(({ weeks, isNew, opt, plan, ...e }, k) => {
+      const key = Number.isFinite(e.group) ? e.group : `n${k}`;
+      if (!map.has(key)) map.set(key, freeGroup(S.exercises));
+      const nx = { ...e, group: map.get(key) };
+      S.exercises.push(nx);
+      S.state.push(initState(nx));
+    });
+    rebuildStack(first, true);
+    buzz(9);
+    toast(`${x.label} ajouté — facultatif, arrête quand tu veux`);
+  }, 260);
 }
 
 /* Ajouter un exercice à la séance en cours. En séance libre, il

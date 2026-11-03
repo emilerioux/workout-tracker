@@ -23,6 +23,7 @@ const K = {
   badges:    "wt2-badges-seen",
   gifts:     "wt2-gifts",
   blocks:    "wt2-blocks",
+  notDupes:  "wt2-not-dupes",
   hint:     "wt2-hint-seen",
   scrub:    "wt2-scrub-learned",
   accentFix: "wt2-accents-v1",
@@ -219,7 +220,7 @@ function streakWeeks() {
    développé. */
 const MUSCLES = ["Pectoraux", "Dos", "Épaules", "Biceps", "Triceps", "Jambes", "Abdos", "Autre"];
 const MUSCLE_RULES = [
-  ["Abdos",     /abdo|\babs?\b|crunch|plank|planche|gainage|core|releve de jambe|leg raise|russian twist|ab wheel/],
+  ["Abdos",     /abdo|\babs?\b|crunch|plank|planche|gainage|core|releve de jambe|leg raise|russian twist|ab wheel|sit.?ups?|dead.?bugs?|to[ew] touch|hollow|oblique/],
   ["Jambes",    /squat|leg |leg$|jambe|presse|lunge|fente|hip thrust|mollet|calf|rdl|roumain|romanian|ischio|quadri|hack|adducteur|abducteur|fessier|glute|step.?up|bulgar/],
   ["Épaules",   /militaire|overhead|ohp|shoulder|epaule|lateral|elevation|face pull|delt|arnold|oiseau|rear delt/],
   ["Biceps",    /curl|biceps|marteau|hammer/],
@@ -558,6 +559,66 @@ function renameExercise(from, to) {
   persist.logs(); persist.programs(); persist.notes(); persist.prs();
 }
 
+/* ── Doublons ─────────────────────────────────────────────
+   Le même mouvement noté sous deux noms (« Pull-ups » / « Pull Ups »)
+   coupe l'historique et les records en deux. Deux noms se
+   ressemblent quand leurs mots sont les mêmes une fois la
+   ponctuation, le pluriel et DB/dumbbell ramenés à la même forme. */
+const EX_ALIAS = { dumbbell: "db", haltere: "db", barbell: "bb", barre: "bb" };
+function exKeys(name) {
+  const w = deaccent(name).replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean)
+    .map((x) => x.length > 3 ? x.replace(/s$/, "") : x).map((x) => EX_ALIAS[x] || x);
+  return [`c:${w.join("")}`, `s:${[...w].sort().join(" ")}`];
+}
+const notDupes = () => load(K.notDupes, []);
+const pairKey = (a, b) => [a, b].sort().join("|");
+
+function similarExercises() {
+  const seen = {}, pairs = [], skip = notDupes();
+  allExercises().forEach((n) => {
+    const keys = exKeys(n), hit = keys.map((k) => seen[k]).find(Boolean);
+    if (hit && !skip.includes(pairKey(hit, n))) pairs.push([hit, n]);
+    keys.forEach((k) => { if (!seen[k]) seen[k] = n; });
+  });
+  return pairs;
+}
+function markNotDupe(a, b) { save(K.notDupes, [...notDupes(), pairKey(a, b)]); }
+
+/* Fusionner = tout passer sous `keep`. Sa note, sa vidéo et son
+   muscle gagnent ; ceux de l'autre ne servent que s'il n'en a pas. */
+function mergeExercises(keep, drop) {
+  if (DB.notes[keep] !== undefined) delete DB.notes[drop];
+  if (DB.links[keep] !== undefined) delete DB.links[drop];
+  if (DB.muscles[keep] !== undefined) delete DB.muscles[drop];
+  renameExercise(drop, keep);
+  persist.links(); persist.muscles();
+}
+
+/* ── Extras de fin de séance ──────────────────────────────
+   Ce qu'on peut enchaîner une fois la séance finie, jamais imposé :
+   ses programmes d'abdos (les plus faits d'abord) et ses cardios
+   habituels, avec la durée de la dernière fois. */
+function extraOptions(current) {
+  const used = (p) => DB.logs.filter((l) => l.programId === p.id).length;
+  const abs = DB.programs
+    .filter((p) => p.id !== current.id && !p.blockId && p.exercises.length &&
+      (/abdo|abs|core/.test(deaccent(p.name)) ||
+        p.exercises.filter((e) => e.kind !== "cardio" && muscleOf(e.name) === "Abdos").length >= p.exercises.length * 0.6))
+    .sort((a, b) => used(b) - used(a)).slice(0, 2)
+    .map((p) => ({ id: p.id, label: p.name, sub: `${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""}`, exercises: p.exercises }));
+  const count = {}, lastMin = {};
+  [...DB.logs].sort((a, b) => a.createdAt - b.createdAt).forEach((l) => {
+    if (!cardioLog(l)) return;
+    count[l.exercise] = (count[l.exercise] || 0) + 1;
+    if (l.minutes) lastMin[l.exercise] = l.minutes;
+  });
+  const cardio = Object.keys(count).sort((a, b) => count[b] - count[a]).slice(0, 2).map((name) => {
+    const minutes = lastMin[name] || 10;
+    return { id: `cardio:${name}`, label: name, sub: `${fmt(minutes)} min`, exercises: [{ name, kind: "cardio", minutes }] };
+  });
+  return [...abs, ...cardio];
+}
+
 /* ── Import depuis l'ancienne app (même origine) ──────────── */
 
 /* Regarde ce qu'il y a à récupérer, sans rien écrire. */
@@ -768,6 +829,8 @@ const GIFTS = [
       name: "Fondations 5 jours",
       focus: "Deux séances de jambes par rotation, relancer le DB incline et monter vers 6 tractions, sans perdre ton bench.",
       weeks: 6,
+      /* Fin de session et examens finaux : séances courtes proposées. */
+      light: [{ from: "2026-11-30", to: "2026-12-13", why: "Fin de session et examens finaux" }],
       goals: [
         { exercise: "Pull Ups", metric: "reps", target: 6, weight: null, deadline: "bloc",
           why: "Ton record est 4 : l'étape vers tes 10 d'avril." },
@@ -781,9 +844,9 @@ const GIFTS = [
       { key: "push", name: "Push", exercises: [
         { name: "BB bench press", sets: 3, reps: "3-5", group: 0, weeks: weeksOf("3-5", "+5 lb quand toutes les séries font 5", 3, 4) },
         { name: "DB incline bench", sets: 3, reps: "8-10", group: 1, weeks: weeksOf("8-10", "Repars à 60 lb ; 10 reps partout → +5 lb", 3, 4) },
-        { name: "Chest fly", sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "Étirement contrôlé en bas") },
-        { name: "Dips", sets: 3, reps: "10-15", group: 3, weeks: weeksOf("10-15", "15 reps partout → ajoute du poids") },
-        { name: "Skull crusher", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "Essaie 30 lb, même à 8 reps") },
+        { name: "Chest fly", opt: true, sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "Étirement contrôlé en bas") },
+        { name: "Dips", opt: true, sets: 3, reps: "10-15", group: 3, weeks: weeksOf("10-15", "15 reps partout → ajoute du poids") },
+        { name: "Skull crusher", opt: true, sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "Essaie 30 lb, même à 8 reps") },
         { name: "Seated DB shoulder press", sets: 3, reps: "8-10", group: 4, isNew: true, weeks: weeksOf("8-10", "Dos appuyé ; 10 reps partout → +5 lb") },
       ] },
       { key: "pull", name: "Pull", exercises: [
@@ -795,28 +858,28 @@ const GIFTS = [
           ...weeksOf("10-12", "+5 lb quand 12 reps partout").slice(0, 2),
           ...weeksOf("8-10", "Plus lourd, moins de reps", 4, 4).slice(2, 4),
           ...weeksOf("6-8", "Monte vers 170 lb", 4, 4).slice(4) ] },
-        { name: "Vertical pull down", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout") },
-        { name: "Reverse cable flys", sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12") },
-        { name: "Shrugs DB", sets: 3, reps: "15", group: 5, weeks: weeksOf("15", "Pause 1 s en haut") },
-        { name: "Curl Marteau", sets: 3, reps: "10-12", group: 5, weeks: weeksOf("10-12", "12 reps partout → 40 lb") },
+        { name: "Vertical pull down", opt: true, sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout") },
+        { name: "Reverse cable flys", opt: true, sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12") },
+        { name: "Shrugs DB", opt: true, sets: 3, reps: "15", group: 5, weeks: weeksOf("15", "Pause 1 s en haut") },
+        { name: "Curl Marteau", opt: true, sets: 3, reps: "10-12", group: 5, weeks: weeksOf("10-12", "12 reps partout → 40 lb") },
       ] },
       { key: "legs", name: "Legs", exercises: [
         { name: "Goblet Squat", sets: 3, reps: "10-12", group: 0, weeks: weeksOf("10-12", "+5 lb chaque semaine", 3, 4) },
         { name: "Single leg leg press", sets: 3, reps: "10-12", group: 1, isNew: true, weeks: weeksOf("10-12", "Reps par jambe ; commence léger") },
-        { name: "Leg Extension", sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout", 3, 4) },
+        { name: "Leg Extension", opt: true, sets: 3, reps: "10-12", group: 2, weeks: weeksOf("10-12", "+5 lb quand 12 reps partout", 3, 4) },
         { name: "Leg Curl", sets: 3, reps: "12-15", group: 3, weeks: weeksOf("12-15") },
-        { name: "Mollets debout", sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12", "Pause 2 s en bas, étirement complet") },
+        { name: "Mollets debout", opt: true, sets: 3, reps: "10-12", group: 4, weeks: weeksOf("10-12", "Pause 2 s en bas, étirement complet") },
       ] },
       { key: "upper", name: "Upper", exercises: [
         { name: "Military press", sets: 3, reps: "4-6", group: 0, weeks: weeksOf("4-6", "+5 lb quand 4 × 6 passe", 3, 4) },
         { name: "DB bench press", sets: 4, reps: "6-8", group: 1, weeks: weeksOf("6-8", "8 reps partout → +5 lb", 4, 4) },
         { name: "T bar row", sets: 4, reps: "6-8", group: 1, weeks: weeksOf("6-8", "+10 lb quand 8 reps partout", 4, 4) },
-        { name: "Close grip lat pulldown", sets: 3, reps: "12", group: 2, weeks: weeksOf("12") },
+        { name: "Close grip lat pulldown", opt: true, sets: 3, reps: "12", group: 2, weeks: weeksOf("12") },
         { name: "Lateral raise", sets: 3, reps: "15", group: 3, weeks: weeksOf("15") },
         { name: "Face pull", sets: 3, reps: "12-15", group: 3, isNew: true, weeks: weeksOf("12-15", "Coudes hauts, tire vers le front") },
-        { name: "Curl barre EZ", sets: 3, reps: "8-10", group: 4, weeks: weeksOf("8-10") },
-        { name: "Pushdown triceps (corde)", sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
-        { name: "7-7-7", sets: 2, reps: "21", group: 5, weeks: weeksOf("21", "", 2, 2) },
+        { name: "Curl barre EZ", opt: true, sets: 3, reps: "8-10", group: 4, weeks: weeksOf("8-10") },
+        { name: "Pushdown triceps (corde)", opt: true, sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
+        { name: "7-7-7", opt: true, sets: 2, reps: "21", group: 5, weeks: weeksOf("21", "", 2, 2) },
       ] },
       { key: "lower", name: "Lower", exercises: [
         { name: "Barbell Hip Trust", sets: 3, reps: "8-10", group: 0, weeks: [
@@ -824,8 +887,8 @@ const GIFTS = [
           ...weeksOf("6-8", "Vise 245 lb", 4, 4).slice(4) ] },
         { name: "DB Romanian deadlift", sets: 3, reps: "8-10", group: 1, isNew: true, weeks: weeksOf("8-10", "Hanches en arrière, dos plat, sens les ischios") },
         { name: "Leg press", sets: 3, reps: "10-12", group: 2, isNew: true, weeks: weeksOf("10-12", "Pieds largeur d'épaules, descends à 90°", 3, 4) },
-        { name: "Abducteur machine", sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12") },
-        { name: "Abdo machine", sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
+        { name: "Abducteur machine", opt: true, sets: 3, reps: "10-12", group: 3, weeks: weeksOf("10-12") },
+        { name: "Abdo machine", opt: true, sets: 3, reps: "12-15", group: 4, weeks: weeksOf("12-15") },
       ] },
     ],
     /* « close grip » serait deviné triceps. */
@@ -886,7 +949,7 @@ function addBlockGift(g) {
   });
   DB.blocks.push({
     id: g.id, n: g.block.n, name: g.block.name, focus: g.block.focus || "", weeks: g.block.weeks,
-    start: null, endedAt: null, programIds,
+    start: null, endedAt: null, programIds, light: g.block.light || [], lightMarks: {},
     goals: (g.block.goals || []).map((x, k) => ({ id: `${g.id}-goal-${k}`, ...x, status: null })),
     swaps: [], deliveredAt: Date.now(),
   });
@@ -925,6 +988,60 @@ const blockLastDay = (b) => b.endedAt || (blockState(b) === "finished" ? blockPl
 function weekPlan(e, w) {
   if (!e || !Array.isArray(e.weeks) || !e.weeks.length || w < 1) return null;
   return e.weeks[Math.min(w, e.weeks.length) - 1];
+}
+
+/* ── Semaines chargées à l'école ───────────────────────────
+   Le coach marque d'avance les semaines d'examens (`b.light` :
+   [{ from, to, why }], tirées du calendrier) ; Emile en ajoute ou
+   en retire une depuis la carte du bloc (`b.lightMarks`, par lundi).
+   Une semaine chargée PROPOSE la version courte de chaque séance,
+   elle ne l'impose jamais. Renvoie { why } ou null. */
+function lightWeek(b, d = new Date()) {
+  if (!b) return null;
+  const mon = mondayOf(d), sun = new Date(mon);
+  sun.setDate(sun.getDate() + 6);
+  const mark = (b.lightMarks || {})[iso(mon)];
+  if (mark === false) return null;
+  const r = (b.light || []).find((x) => x.from <= iso(sun) && x.to >= iso(mon));
+  if (r) return { why: r.why || "" };
+  return mark ? { why: "" } : null;
+}
+function setLightWeek(b, on) {
+  b.lightMarks = b.lightMarks || {};
+  b.lightMarks[iso(mondayOf())] = on;
+  persist.blocks();
+}
+
+/* La version courte d'une séance : sans les accessoires (`opt`,
+   choisis par le coach) — à défaut, les 3 premiers exercices ou
+   supersets —, avec une série de moins partout, jamais sous 2. */
+function shortVersion(exs) {
+  const key = (e, i) => (Number.isFinite(e.group) ? e.group : `i${i}`);
+  const groups = [...new Set(exs.map(key))];
+  const keep = exs.some((e) => e.opt) ? (e) => !e.opt : (e, i) => groups.indexOf(key(e, i)) < 3;
+  return exs.filter(keep).map((e) => e.kind === "cardio" ? e : { ...e, sets: Math.max(2, (e.sets || 3) - 1) });
+}
+const setsCount = (exs) => exs.reduce((a, e) => a + (e.kind === "cardio" ? 0 : (e.sets || 0)), 0);
+
+/* Un bloc déjà reçu prend ce qui a été ajouté à sa livraison depuis
+   (semaines allégées, accessoires), sans toucher à ce qu'Emile a
+   changé : seulement les champs encore absents. */
+function syncBlockGifts() {
+  let changed = false;
+  GIFTS.forEach((g) => {
+    const b = g.block && blockById(g.id);
+    if (!b) return;
+    if (!b.light && g.block.light) { b.light = g.block.light; b.lightMarks = b.lightMarks || {}; changed = true; }
+    g.programs.forEach((gp, k) => {
+      const p = DB.programs.find((x) => x.id === `${g.id}-${gp.key || k}`);
+      if (!p) return;
+      gp.exercises.forEach((ge) => {
+        const e = ge.opt && p.exercises.find((x) => x.name === ge.name);
+        if (e && e.opt === undefined) { e.opt = true; changed = true; }
+      });
+    });
+  });
+  if (changed) { persist.blocks(); persist.programs(); }
 }
 
 /* Commencer un bloc remplace celui d'avant : il est rangé, pas effacé. */
@@ -981,7 +1098,7 @@ function blockSummary(b) {
   const weeks = Array.from({ length: Math.max(b.weeks, nWeeks) }, (_, k) => {
     const m = mondayOf(new Date(from + "T00:00:00"), k), e = new Date(m); e.setDate(e.getDate() + 7);
     const wl = logs.filter((l) => l.date >= iso(m) && l.date < iso(e));
-    return { n: k + 1, sessions: new Set(wl.map((l) => l.date)).size, sets: wl.reduce((s, l) => s + setsOf(l), 0), future: k >= nWeeks };
+    return { n: k + 1, sessions: new Set(wl.map((l) => l.date)).size, sets: wl.reduce((s, l) => s + setsOf(l), 0), future: k >= nWeeks, light: !!lightWeek(b, m) };
   });
 
   /* Records : une entrée qui dépasse tout ce qui précède, PENDANT le bloc. */
@@ -1045,7 +1162,7 @@ function coachPayload(b) {
     app: "reps", kind: b ? "coach-bilan" : "coach-start", version: 1, exportedAt: new Date().toISOString(),
     favorites: favoriteExercises(),
     goals: DB.goals,
-    blocks: DB.blocks.map(({ id, n, name, focus, weeks, start, endedAt, swaps }) => ({ id, n, name, focus, weeks, start, endedAt, swaps })),
+    blocks: DB.blocks.map(({ id, n, name, focus, weeks, start, endedAt, swaps, light, lightMarks }) => ({ id, n, name, focus, weeks, start, endedAt, swaps, light, lightMarks })),
     notes: DB.notes, muscles: DB.muscles,
     bodyweight: [...DB.bodyweight].sort((x, y) => x.createdAt - y.createdAt).slice(-30),
   };

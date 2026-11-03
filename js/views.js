@@ -385,6 +385,9 @@ function renderBackup() {
    dit « où j'en suis », le texte dit les chiffres. Les objectifs
    en cours d'abord, les atteints ensuite (les 3 plus récents). */
 const daysLeft = (dateStr) => Math.ceil((new Date(dateStr + "T23:59:59") - Date.now()) / 86400000);
+/* « Ordre » : les objectifs en cours se glissent par leur poignée,
+   le plus important en haut. L'ordre vit dans DB.goals lui-même. */
+let goalsReorder = false;
 
 function renderGoals() {
   const host = $("goals-card");
@@ -405,24 +408,57 @@ function renderGoals() {
       sub = [at, `reste ${goalAmount(g.metric, left)}${dir}`,
         dl == null ? null : dl > 1 ? `${dl} jours` : dl === 1 ? "dernier jour" : "échéance passée"].filter(Boolean).join(" · ");
     }
-    return `<button type="button" class="goal${g.doneAt ? " done" : ""}" data-goal="${esc(g.id)}"
-        aria-label="${esc(g.exercise)} : ${fmt(cur)} sur ${fmt(g.target)} ${u}${at ? ` ${at}` : ""}">
-        <span class="goal-top"><b>${esc(g.exercise)}</b>
+    const inner = `<span class="goal-top"><b>${esc(g.exercise)}</b>
           <span class="tnum">${g.doneAt ? `${CHECK_PATH}` : ""}${fmt(g.doneAt ? g.target : cur)} / ${fmt(g.target)} ${u}</span></span>
         <span class="goal-track"><span class="goal-fill" style="width:${Math.round(p * 100)}%"></span></span>
-        <span class="goal-sub">${sub}</span>
-      </button>`;
+        <span class="goal-sub">${sub}</span>`;
+    if (goalsReorder) return `<div class="goal-r" data-id="${esc(g.id)}"><div class="goal">${inner}</div>
+        <span class="drag-handle" role="button" tabindex="0" aria-label="Déplacer ${esc(g.exercise)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14M5 15h14"/></svg></span></div>`;
+    return `<button type="button" class="goal${g.doneAt ? " done" : ""}" data-goal="${esc(g.id)}"
+        aria-label="${esc(g.exercise)} : ${fmt(cur)} sur ${fmt(g.target)} ${u}${at ? ` ${at}` : ""}">${inner}</button>`;
   };
+  if (active.length < 2) goalsReorder = false;
   host.innerHTML =
     `<section class="card-surface goals-card" aria-label="Objectifs">
        <header class="week-head"><h3>Objectifs</h3>
-         <button type="button" class="mini-btn" id="goal-add">
-           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter</button></header>
+         <span class="goal-btns">
+           ${active.length > 1 ? `<button type="button" class="mini-btn${goalsReorder ? " on" : ""}" id="goal-order">${goalsReorder ? "OK" : `
+             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16m0 0-3-3m3 3 3-3M16 20V4m0 0-3 3m3-3 3 3"/></svg>Ordre`}</button>` : ""}
+           ${goalsReorder ? "" : `<button type="button" class="mini-btn" id="goal-add">
+             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter</button>`}</span></header>
+       ${goalsReorder ? `<p class="goal-hint">Glisse la poignée : le plus important en haut.</p>` : ""}
        ${active.length || done.length
-         ? `<div class="goal-list">${active.map(row).join("")}${done.map(row).join("")}</div>`
+         ? `<div class="goal-list${goalsReorder ? " ordering" : ""}">${active.map(row).join("")}${goalsReorder ? "" : done.map(row).join("")}</div>`
          : `<p class="goal-empty">Un poids ou un nombre de reps sur un exercice, une distance en cardio, ou ton poids corporel — avec une date si tu veux.</p>`}
      </section>`;
-  $("goal-add").addEventListener("click", () => goalSheet());
+  if ($("goal-add")) $("goal-add").addEventListener("click", () => goalSheet());
+  if ($("goal-order")) $("goal-order").addEventListener("click", () => {
+    goalsReorder = !goalsReorder;
+    buzz(goalsReorder ? 8 : 6);
+    renderGoals();
+  });
+  if (goalsReorder) {
+    /* Seuls les objectifs en cours bougent ; les atteints gardent
+       leur place derrière. */
+    const move = (from, to) => {
+      const list = DB.goals.filter((g) => !g.doneAt);
+      list.splice(to, 0, list.splice(from, 1)[0]);
+      DB.goals = [...list, ...DB.goals.filter((g) => g.doneAt)];
+      persist.goals();
+      renderGoals();
+    };
+    const list = host.querySelector(".goal-list");
+    dragToReorder(list, { rowSelector: ".goal-r", gap: 6, onCommit: move });
+    list.querySelectorAll(".drag-handle").forEach((h, i) => h.addEventListener("keydown", (ev) => {
+      const d = ev.key === "ArrowUp" ? -1 : ev.key === "ArrowDown" ? 1 : 0;
+      if (!d || i + d < 0 || i + d >= active.length) return;
+      ev.preventDefault();
+      buzz(8);
+      move(i, i + d);
+      host.querySelectorAll(".goal-list .drag-handle")[i + d].focus();
+    }));
+  }
   host.querySelectorAll("[data-goal]").forEach((b) => b.addEventListener("click", () => {
     const g = DB.goals.find((x) => x.id === b.dataset.goal);
     if (g) goalSheet({ ...g });
@@ -732,6 +768,9 @@ function renderBlock() {
   const proposed = b.goals.filter((g) => !g.status);
   const nextP = st !== "pending" && DB.programs.find((p) => p.id === nextInRotation(b));
   const doneN = st !== "pending" ? blockSummary(b).sessions : 0;
+  const lw = st === "running" ? lightWeek(b) : null;
+  /* La prochaine période allégée prévue par le coach, pour la voir venir. */
+  const soon = (b.light || []).find((r) => r.to >= today() && !(lw && r.from <= today()));
 
   const body = {
     pending: `<p class="bk-meta">${b.weeks} semaines · ${b.programIds.length} programme${b.programIds.length > 1 ? "s" : ""} en rotation${cur ? ` · remplace le bloc ${cur.n}` : ""}</p>`,
@@ -740,7 +779,12 @@ function renderBlock() {
          <span class="row-stripe" style="background:${stripeOf(nextP)}"></span>
          <span><em>Prochaine séance</em><b>${esc(nextP.name)}</b></span>
          <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>` : ""}
-      <p class="bk-meta">${doneN} séance${doneN > 1 ? "s" : ""} depuis le ${shortDay(b.start)} · fin le ${shortDay(blockPlannedEnd(b))}</p>`,
+      <p class="bk-meta">${doneN} séance${doneN > 1 ? "s" : ""} depuis le ${shortDay(b.start)} · fin le ${shortDay(blockPlannedEnd(b))}</p>
+      ${lw ? `<div class="bk-light">
+         <span><b>Semaine chargée${lw.why ? ` · ${esc(lw.why)}` : ""}</b>
+           <em>Fais ce que tu peux : 2 ou 3 séances suffisent, en version courte si tu veux. La rotation reprend où tu étais.</em></span>
+         <button type="button" class="nudge-no" id="bk-light-off">Pas cette semaine</button></div>`
+       : soon ? `<p class="bk-meta">${esc(soon.why || "Semaines chargées")} : séances courtes proposées du ${shortDay(soon.from)} au ${shortDay(soon.to)}.</p>` : ""}`,
     finished: `${weekBar(b)}
       <p class="bk-meta">Envoie ton bilan au coach pour préparer le bloc ${b.n + 1}. D'ici là, continue celui-ci.</p>`,
   }[st];
@@ -748,7 +792,8 @@ function renderBlock() {
   const actions = {
     pending: `<button type="button" class="nudge-yes" id="bk-start">Commencer le bloc</button>
               <button type="button" class="nudge-no" id="bk-see">Voir les programmes</button>`,
-    running: `<button type="button" class="nudge-no" id="bk-bilan">Bilan jusqu'ici</button>`,
+    running: `<button type="button" class="nudge-no" id="bk-bilan">Bilan jusqu'ici</button>
+              ${lw ? "" : `<button type="button" class="nudge-no" id="bk-light-on">Semaine chargée</button>`}`,
     finished: `<button type="button" class="nudge-yes" id="bk-send">Envoyer au coach</button>
                <button type="button" class="nudge-no" id="bk-bilan">Voir le bilan</button>`,
   }[st];
@@ -775,6 +820,8 @@ function renderBlock() {
   on("bk-see", () => blocksPage());
   on("bk-bilan", () => blockSheet(b));
   on("bk-send", () => coachSend(b));
+  on("bk-light-on", () => { setLightWeek(b, true); buzz(9); toast("Séances courtes proposées cette semaine"); renderPrograms(); });
+  on("bk-light-off", () => { setLightWeek(b, false); buzz(6); toast("Semaine normale"); renderPrograms(); });
   host.querySelectorAll("[data-prog]").forEach((x) => x.addEventListener("click", () => showProgram(x.dataset.prog)));
   host.querySelectorAll("[data-acc], [data-dis]").forEach((x) => x.addEventListener("click", () => {
     const g = b.goals.find((y) => y.id === (x.dataset.acc || x.dataset.dis));
@@ -1029,8 +1076,8 @@ function relDay(dateStr) {
 /* Une rangée d'exercice de la fiche programme. Extraite parce que
    les exercices d'un superset la réutilisent telle quelle, à
    l'intérieur de leur encadré. */
-function exRow(e, badge, stripe, w = 0) {
-  const sub = exPlanSub(e, w);
+function exRow(e, badge, stripe, w = 0, light = false) {
+  const sub = exPlanSub(e, w) + (light && e.opt ? " · facultatif cette semaine" : "");
   return `<li class="ex-row${badge.superset ? " ss" : ""}">
       <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
       <span class="ex-num">${badge.superset ? `<b>${badge.text}</b>` : badge.text}</span>
@@ -1070,6 +1117,34 @@ function heroMeta(p) {
   ].filter(Boolean).map(esc).join(" · ");
 }
 
+/* Semaine chargée : la séance courte est proposée, la complète
+   reste à un toucher. Rien n'est imposé. */
+function chooseLength(p, w, lw) {
+  const full = p.exercises.map((e) => { const x = weekPlan(e, w); return x ? { ...e, sets: x.sets ?? e.sets } : e; });
+  const short = shortVersion(full);
+  const ex = (n) => `${n} exercice${n > 1 ? "s" : ""}`;
+  openSheet(
+    `<p class="sheet-kicker">Semaine chargée${lw.why ? ` · ${esc(lw.why)}` : ""}</p>
+     <h2 class="sheet-h">Séance courte ou complète ?</h2>
+     <p class="muted">La courte garde les gros mouvements, avec une série de moins. La rotation continue pareil.</p>
+     <div class="menu-list">
+       <button type="button" class="pick-row" id="len-short"><span>Version courte
+         <em class="pick-sub">${ex(short.length)} · ${setsCount(short)} séries · sans les accessoires</em></span>
+         <svg viewBox="0 0 24 24" class="tick"><path d="m9 6 6 6-6 6"/></svg></button>
+       <button type="button" class="pick-row" id="len-full"><span>Séance complète
+         <em class="pick-sub">${ex(full.length)} · ${setsCount(full)} séries</em></span>
+         <svg viewBox="0 0 24 24" class="tick"><path d="m9 6 6 6-6 6"/></svg></button>
+     </div>`
+  );
+  const go = (sh) => () => {
+    buzz(8);
+    closeSheet();
+    onSheetClose = () => { popView(); setTimeout(() => startSession(p, null, { short: sh }), 220); };
+  };
+  $("len-short").addEventListener("click", go(true));
+  $("len-full").addEventListener("click", go(false));
+}
+
 function showProgram(id) {
   const p = DB.programs.find((x) => x.id === id);
   if (!p) return;
@@ -1079,6 +1154,7 @@ function showProgram(id) {
   const blk = p.blockId ? blockById(p.blockId) : null;
   /* Dans un bloc en cours, chaque exercice dit sa cible de la semaine. */
   const w = blk && blk.start && !blk.endedAt ? blockWeek(blk) : 0;
+  const lw = w && blockState(blk) === "running" ? lightWeek(blk) : null;
 
   pushView(
     `<header class="pushed-bar">
@@ -1092,13 +1168,13 @@ function showProgram(id) {
      </header>
      <div class="pushed-scroll">
        <div class="prog-hero ink-${heroInk([c1, c2])}" style="background:linear-gradient(160deg,${c1},${c2})">
-         ${blk ? `<p class="hero-k">${esc(blockTitle(blk))}</p>` : ""}
+         ${blk ? `<p class="hero-k">${esc(blockTitle(blk))}${lw ? " · semaine chargée" : ""}</p>` : ""}
          <h1>${esc(p.name)}</h1>
          <p>${heroMeta(p)}</p>
        </div>
        <ol class="ex-list">
          ${supersetRuns(p.exercises).map((run) => {
-           const rows = run.map((i) => exRow(p.exercises[i], badges[i], stripe, w)).join("");
+           const rows = run.map((i) => exRow(p.exercises[i], badges[i], stripe, w, !!lw)).join("");
            if (run.length < 2) return rows;
            const tours = Math.max(...run.map((i) => p.exercises[i].sets || 0));
            return `<li class="ss-group">
@@ -1117,6 +1193,7 @@ function showProgram(id) {
   );
 
   $("start-session").addEventListener("click", () => {
+    if (lw) { chooseLength(p, w, lw); return; }
     popView();
     setTimeout(() => startSession(p), 220);
   });
@@ -2276,6 +2353,8 @@ function renderSettings() {
     ? `Dernière sauvegarde : ${relDay(iso(new Date(last)))}.`
     : "Aucune sauvegarde pour l'instant.";
   $("version-line").textContent = `${DB.logs.length} entrées · ${DB.programs.length} programmes`;
+  const nd = similarExercises().length;
+  $("manage-ex-btn").textContent = nd ? `Gérer mes exercices · ${nd} doublon${nd > 1 ? "s" : ""}` : "Gérer mes exercices";
 }
 
 /* Le détail vit dans une feuille : la récupération ne sert qu'une
@@ -2334,12 +2413,24 @@ function renderAppearance() {
   $("accent-name").innerHTML = `Accent : <b>${esc(currentAccent().name)}</b>`;
 }
 
+const MERGE_IC = '<svg viewBox="0 0 24 24" class="tick"><path d="M6 4l6 7 6-7M12 11v9"/></svg>';
+const entriesOf = (n) => DB.logs.filter((l) => l.exercise === n).length;
+
 function manageExercisesSheet() {
   const names = allExercises();
   if (!names.length) { toast("Aucun exercice pour l'instant"); return; }
+  const dupes = similarExercises();
   openSheet(
     `<h2 class="sheet-h">Mes exercices</h2>
      <p class="muted">Touche un exercice pour le renommer partout ou lui donner une note.</p>
+     ${dupes.length ? `<p class="block-key">Doublons possibles</p>
+       <div class="menu-list">${dupes.map(([a, b], k) => `<button type="button" class="pick-row" data-dupe="${k}">
+         <span>${esc(a)} · ${esc(b)}<em class="pick-sub">Même mouvement ? Touche pour fusionner</em></span>${MERGE_IC}</button>`).join("")}</div>` : ""}
+     <div class="menu-list">
+       <button type="button" class="pick-row" id="mx-merge"><span>Fusionner deux exercices
+         <em class="pick-sub">Un même mouvement noté sous deux noms</em></span>${MERGE_IC}</button>
+     </div>
+     <p class="block-key">Tous</p>
      <div class="pick-list">
        ${names.map((n) => `<button type="button" class="pick-row" data-name="${esc(n)}">
           <span>${esc(n)}<em class="pick-sub">${DB.notes[n] ? esc(DB.notes[n]) : `${DB.logs.filter((l) => l.exercise === n).length} entrées`}</em></span>
@@ -2354,6 +2445,48 @@ function manageExercisesSheet() {
       onSheetClose = () => editExerciseSheet(n);
     });
   });
+  $("sheet-body").querySelectorAll("[data-dupe]").forEach((b) => b.addEventListener("click", () => {
+    const [x, y] = dupes[Number(b.dataset.dupe)];
+    closeSheet();
+    onSheetClose = () => mergeSheet(x, y, true);
+  }));
+  /* Deux noms qui ne se ressemblent pas (« Incline dumbbell press » /
+     « DB incline bench ») : on les choisit l'un après l'autre. */
+  $("mx-merge").addEventListener("click", () => {
+    closeSheet();
+    onSheetClose = () => pickExercise("", (a) => pickExercise(a, (b) => {
+      if (b === a) { toast("Choisis deux exercices différents"); return; }
+      mergeSheet(a, b);
+    }, { create: false }), { create: false });
+  });
+}
+
+/* Garder quel nom ? Celui qui a le plus d'entrées est proposé en premier. */
+function mergeSheet(a, b, detected = false) {
+  const [x, y] = entriesOf(b) > entriesOf(a) ? [b, a] : [a, b];
+  const opt = (keep, drop) => `<button type="button" class="pick-row" data-keep="${esc(keep)}" data-drop="${esc(drop)}">
+      <span>Garder « ${esc(keep)} »<em class="pick-sub">${entriesOf(keep)} entrée${entriesOf(keep) > 1 ? "s" : ""}${DB.prs[keep] ? ` · record ${fmt(DB.prs[keep])} lb` : ""}</em></span>${MERGE_IC}</button>`;
+  openSheet(
+    `<p class="sheet-kicker">Fusionner</p>
+     <h2 class="sheet-h">Garder quel nom ?</h2>
+     <p class="muted">Les ${entriesOf(x) + entriesOf(y)} entrées, les records, les objectifs et les programmes passent sous le nom gardé. L'autre disparaît.</p>
+     <div class="menu-list">${opt(x, y)}${opt(y, x)}</div>
+     ${detected ? `<button class="ghost-btn" id="mg-not">Ce ne sont pas les mêmes</button>` : ""}
+     <button class="ghost-btn" id="mg-no">Annuler</button>`
+  );
+  $("sheet-body").querySelectorAll("[data-keep]").forEach((bt) => bt.addEventListener("click", () => {
+    const keep = bt.dataset.keep, drop = bt.dataset.drop;
+    mergeExercises(keep, drop);
+    buzz([10, 40, 14]);
+    closeSheet();
+    onSheetClose = () => { refreshAll(); toast(`Fusionné sous « ${keep} »`); };
+  }));
+  if ($("mg-not")) $("mg-not").addEventListener("click", () => {
+    markNotDupe(a, b);
+    closeSheet();
+    onSheetClose = () => { refreshAll(); toast("Gardés séparés"); };
+  });
+  $("mg-no").addEventListener("click", () => closeSheet());
 }
 
 function editExerciseSheet(name) {

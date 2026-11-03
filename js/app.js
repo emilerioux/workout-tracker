@@ -242,6 +242,7 @@ function initApp() {
 normalizeAccents();
 normalizeGroups();
 const gifted = addGifts();
+syncBlockGifts();
 initApp();
 refreshAll();
 if (gifted.length) toast(`Nouveau programme : ${gifted.join(", ")}`);

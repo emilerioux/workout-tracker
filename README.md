@@ -213,6 +213,26 @@ gros progrès en 1RM estimé, exercices qui stagnent, séries par muscle par
 semaine, exercices changés). Les programmes d'un bloc terminé n'encombrent
 plus la liste principale. Données : `wt2-blocks`.
 
+**Semaines chargées à l'école** — le coach marque d'avance les semaines
+d'examens (`block.light`, d'après le calendrier) ; la carte du bloc a aussi un
+bouton « Semaine chargée » / « Pas cette semaine » (`lightMarks`, par lundi).
+Cette semaine-là, « Commencer » propose **séance courte ou complète** : la
+courte saute les accessoires (`opt: true`, sinon garde les 3 premiers) et
+enlève une série partout (`shortVersion`). Rien n'est imposé.
+`syncBlockGifts()` ajoute ces champs à un bloc déjà reçu sans toucher au reste.
+
+**Extras de fin de séance** — une séance finie propose « Un petit extra ? » :
+ses programmes d'abdos et ses cardios habituels (`extraOptions`). Un toucher
+les ajoute au bout de la séance, facultatifs.
+
+**Doublons** — Réglages → Gérer mes exercices repère les noms du même
+mouvement (« Pull-ups » / « Pull Ups », `similarExercises`) et les fusionne
+(`mergeExercises` : historique, records, objectifs, programmes). « Fusionner
+deux exercices » pour les autres ; « Ce ne sont pas les mêmes » → `wt2-not-dupes`.
+
+**Ordre des objectifs** — bouton « Ordre » sur la carte Objectifs : poignées à
+glisser, le plus important en haut (l'ordre de `DB.goals`).
+
 > Un bloc livré par `GIFTS` est dans le code, donc public sur GitHub — jamais
 > d'objectif de poids corporel dedans.
 

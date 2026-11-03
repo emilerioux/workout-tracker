@@ -170,7 +170,7 @@ function swipeToReveal(el, { width = 88, onCommit }) {
    peut repartir dans l'autre sens en cours de route.
    La poignée est un point de saisie séparé — le reste de la
    rangée garde son glissé horizontal pour supprimer. */
-function dragToReorder(host, { rowSelector = ".swipe-row", onCommit }) {
+function dragToReorder(host, { rowSelector = ".swipe-row", gap = 8, onCommit }) {
   const rows = [...host.querySelectorAll(rowSelector)];
   if (rows.length < 2) return;
 
@@ -183,7 +183,7 @@ function dragToReorder(host, { rowSelector = ".swipe-row", onCommit }) {
 
     handle.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      const h = row.offsetHeight + 8;                 /* gap de .draft-list */
+      const h = row.offsetHeight + gap;               /* gap de la liste */
       let cur = i, dy = 0;
       row._held = true;
       row.classList.add("lifted");
