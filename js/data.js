@@ -244,6 +244,14 @@ function mondayOf(d = new Date(), k = 0) {
 }
 const setsOf = (l) => cardioLog(l) ? 0 : (l.perSet ? l.perSet.length : Number(l.sets) || 0);
 
+/* « Nouveau » s'efface dès que l'exercice a été fait une fois : une
+   seule entrée dans l'historique suffit. Le drapeau `isNew` reste,
+   seul l'affichage change. */
+function stillNew(e) {
+  if (!e || !e.isNew) return false;
+  return !DB.logs.some((l) => l.exercise === e.name);
+}
+
 /* Entrées dont la date tombe dans [lundi + 7·k, +7·n jours). */
 function logsInWeeks(k, n = 1) {
   const from = iso(mondayOf(new Date(), k));

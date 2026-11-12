@@ -918,7 +918,7 @@ function blockSheet(b) {
 /* Une rangée de programme dans un bloc. */
 const bkProgRow = (p) => `<button type="button" class="bk-prog" data-prog="${esc(p.id)}">
     <span class="row-stripe" style="background:${stripeOf(p)}"></span>
-    <span class="bk-prog-t"><b>${esc(p.name)}</b><em>${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""}${p.exercises.some((e) => e.isNew) ? ` · ${p.exercises.filter((e) => e.isNew).length} nouveau${p.exercises.filter((e) => e.isNew).length > 1 ? "x" : ""}` : ""}</em></span>
+    <span class="bk-prog-t"><b>${esc(p.name)}</b><em>${p.exercises.length} exercice${p.exercises.length > 1 ? "s" : ""}${p.exercises.some(stillNew) ? ` · ${p.exercises.filter(stillNew).length} nouveau${p.exercises.filter(stillNew).length > 1 ? "x" : ""}` : ""}</em></span>
     <svg viewBox="0 0 24 24" class="chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
   </button>`;
 /* Ouvrir un programme depuis une feuille ou Mes blocs : on referme
@@ -1116,7 +1116,7 @@ function exRow(e, badge, stripe, w = 0, light = false) {
       <span class="row-stripe" style="background:${stripe}" aria-hidden="true"></span>
       <span class="ex-num">${badge.superset ? `<b>${badge.text}</b>` : badge.text}</span>
       <span class="ex-main">
-        <span class="ex-title">${esc(e.name)}${e.isNew ? `<span class="new-pill">Nouveau</span>` : ""}</span>
+        <span class="ex-title">${esc(e.name)}${stillNew(e) ? `<span class="new-pill">Nouveau</span>` : ""}</span>
         <span class="ex-sub">${sub}</span>
       </span>
       <span class="ex-best">${e.kind !== "cardio" && DB.prs[e.name] ?`${fmt(DB.prs[e.name])}<em>lb</em>` : ""}</span>
@@ -1362,7 +1362,7 @@ function editProgram(existing) {
           <span class="row-stripe" style="background:${stripeOf(draft)}" aria-hidden="true"></span>
           <span class="ex-num">${badges[i].superset ? `<b>${badges[i].text}</b>` : badges[i].text}</span>
           <span class="ex-main">
-            <span class="ex-title">${esc(e.name)}${e.isNew ? `<span class="new-pill">Nouveau</span>` : ""}</span>
+            <span class="ex-title">${esc(e.name)}${stillNew(e) ? `<span class="new-pill">Nouveau</span>` : ""}</span>
             <span class="ex-sub">${exPlanSub(e)}</span>
           </span>
           ${i === 0 || e.kind === "cardio" || draft.exercises[i - 1].kind === "cardio"

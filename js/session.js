@@ -305,7 +305,7 @@ function soloHead(i) {
       ex.reps ? `<b>${esc(ex.reps)}</b> reps` : null,
     ].filter(Boolean).join(" · ");
   const note = DB.notes[ex.name];
-  return (ex.isNew ? `<span class="badge new">Nouveau · à essayer</span>` : "") +
+  return (stillNew(ex) ? `<span class="badge new">Nouveau · à essayer</span>` : "") +
     `<h2 class="ex-name">${esc(ex.name)}</h2>` +
     `<p class="ex-target">${target ? `<span>${target}</span><span class="dot-sep"></span>` : ""}<span>${lastTxt(i)}</span></p>` +
     planLine(i) +
